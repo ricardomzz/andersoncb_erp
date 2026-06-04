@@ -12,6 +12,7 @@
     "shipment_no",
     "mode",
     "carrier",
+    "carrier_profile",
     "voyage_or_flight",
     "origin",
     "destination",
@@ -33,7 +34,15 @@
     {
       "fieldname": "carrier",
       "fieldtype": "Data",
-      "label": "Carrier"
+      "label": "Carrier",
+      "read_only": 1
+    },
+    {
+      "fieldname": "carrier_profile",
+      "fieldtype": "Link",
+      "label": "Carrier Profile",
+      "options": "Carrier",
+      "in_list_view": 0
     },
     {
       "fieldname": "voyage_or_flight",

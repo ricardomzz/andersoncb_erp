@@ -40,7 +40,7 @@ def test_extract_entry_elements_from_get_by_id_wrapper():
 
 
 def test_build_rolling_window_criteria_uses_date_field():
-    assert build_rolling_window_criteria(90) == '[Date] >= DateTime.Today.AddDays(-90)'
+    assert build_rolling_window_criteria(90).startswith('[Date] >= #') and build_rolling_window_criteria(90).endswith('#')
 
 
 def test_parse_soap_body_rejects_invalid_xml():

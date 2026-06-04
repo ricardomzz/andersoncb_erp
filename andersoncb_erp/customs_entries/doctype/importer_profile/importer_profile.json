@@ -1,0 +1,178 @@
+{
+  "doctype": "DocType",
+  "name": "Importer Profile",
+  "module": "Customs Entries",
+  "engine": "InnoDB",
+  "autoname": "hash",
+  "title_field": "display_name",
+  "track_changes": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "field_order": [
+    "status",
+    "display_name",
+    "importer_code",
+    "cbp_number",
+    "irs_number",
+    "contact_name",
+    "email",
+    "phone",
+    "address_line1",
+    "address_line2",
+    "city",
+    "state",
+    "postal_code",
+    "country",
+    "last_lds_submission_on",
+    "lds_submission_errors",
+    "lds_id",
+    "source_active",
+    "last_seen_in_source_on",
+    "last_synced_on",
+    "lds_last_submission_payload",
+    "raw_payload_xml"
+  ],
+  "fields": [
+    {
+      "fieldname": "status",
+      "fieldtype": "Data",
+      "label": "Status",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "display_name",
+      "fieldtype": "Data",
+      "label": "Display Name",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "importer_code",
+      "fieldtype": "Data",
+      "label": "Importer Code",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "cbp_number",
+      "fieldtype": "Data",
+      "label": "CBP Number"
+    },
+    {
+      "fieldname": "irs_number",
+      "fieldtype": "Data",
+      "label": "IRS Number"
+    },
+    {
+      "fieldname": "contact_name",
+      "fieldtype": "Data",
+      "label": "Contact Name"
+    },
+    {
+      "fieldname": "email",
+      "fieldtype": "Data",
+      "label": "Email"
+    },
+    {
+      "fieldname": "phone",
+      "fieldtype": "Data",
+      "label": "Phone"
+    },
+    {
+      "fieldname": "address_line1",
+      "fieldtype": "Data",
+      "label": "Address Line 1"
+    },
+    {
+      "fieldname": "address_line2",
+      "fieldtype": "Data",
+      "label": "Address Line 2"
+    },
+    {
+      "fieldname": "city",
+      "fieldtype": "Data",
+      "label": "City"
+    },
+    {
+      "fieldname": "state",
+      "fieldtype": "Data",
+      "label": "State"
+    },
+    {
+      "fieldname": "postal_code",
+      "fieldtype": "Data",
+      "label": "Postal Code"
+    },
+    {
+      "fieldname": "country",
+      "fieldtype": "Data",
+      "label": "Country"
+    },
+    {
+      "fieldname": "last_lds_submission_on",
+      "fieldtype": "Datetime",
+      "label": "Last LDS Submission On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "lds_submission_errors",
+      "fieldtype": "Small Text",
+      "label": "LDS Submission Errors",
+      "read_only": 1
+    },
+    {
+      "fieldname": "lds_id",
+      "fieldtype": "Data",
+      "label": "LDS Id",
+      "hidden": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "source_active",
+      "fieldtype": "Check",
+      "label": "Source Active",
+      "default": "0",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_seen_in_source_on",
+      "fieldtype": "Datetime",
+      "label": "Last Seen In Source On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_synced_on",
+      "fieldtype": "Datetime",
+      "label": "Last Synced On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "lds_last_submission_payload",
+      "fieldtype": "Code",
+      "label": "LDS Last Submission Payload",
+      "options": "XML",
+      "hidden": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "raw_payload_xml",
+      "fieldtype": "Code",
+      "label": "Raw Payload XML",
+      "options": "XML",
+      "hidden": 1,
+      "read_only": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1
+    }
+  ],
+  "actions": [],
+  "is_submittable": 1
+}

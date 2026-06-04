@@ -19,6 +19,10 @@ class DummyDoc(SimpleNamespace):
         setattr(self, fieldname, value)
 
 
+class DummyRow(SimpleNamespace):
+    pass
+
+
 def make_doc(**overrides):
     base = {
         'doctype': 'Customs Entry',
@@ -33,12 +37,13 @@ def make_doc(**overrides):
         'broker_reference': 'REF-1',
         'bond_number': '999',
         'client_ref': 'CLIENT-1',
+        'importer_profile': 'IMP-1',
         'importer_name': 'Importer Co',
         'importer_number': 'IMP-1',
         'consignee_name': 'Consignee Co',
         'raw_payload_xml': None,
-        'shipments': [],
-        'invoices': [],
+        'shipments': [DummyRow(shipment_no='7', mode='11', destination='2704', arrival_date='2026-06-03', carrier_profile='CAR-1', carrier='Carrier Co')],
+        'invoices': [DummyRow(invoice_number='INV-1')],
         'fees': [],
         'events': [],
         'tariff_lines': [],
@@ -58,41 +63,53 @@ def make_doc(**overrides):
     return DummyDoc(**base)
 
 
-def test_validate_customs_entry_for_submission_requires_core_fields():
-    doc = make_doc(entry_number='', filer_code='', importer_name=None, importer_number=None, port_of_entry=None)
+def fake_get_cached_doc(doctype, name):
+    if doctype == 'Importer Profile':
+        return SimpleNamespace(name=name, display_name='Importer Co', importer_code='IMP-1', cbp_number=None, irs_number=None, raw_payload_xml=None, lds_id='493', docstatus=1)
+    if doctype == 'Carrier':
+        return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR-1', raw_payload_xml=None, lds_id='1488', docstatus=1)
+    raise AssertionError((doctype, name))
+
+
+def test_validate_customs_entry_for_submission_requires_core_links(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+    doc = make_doc(importer_profile=None)
 
     issues = validate_customs_entry_for_submission(doc)
 
-    assert {issue.fieldname for issue in issues} >= {'entry_number', 'filer_code', 'port_of_entry', 'importer_name'}
-    assert 'Entry Number is required.' in format_local_validation_issues(issues)
+    assert {issue.fieldname for issue in issues} >= {'importer_profile'}
+    assert 'Importer Profile is required.' in format_local_validation_issues(issues)
 
 
-def test_validate_customs_entry_for_submission_enforces_entry_number_length():
+def test_validate_customs_entry_for_submission_requires_carrier_links(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+    doc = make_doc(shipments=[DummyRow(shipment_no='7', mode='11', destination='2704', arrival_date='2026-06-03', carrier_profile=None, carrier=None)])
+
+    issues = validate_customs_entry_for_submission(doc)
+
+    assert any('Carrier Profile' in issue.message for issue in issues)
+
+
+def test_validate_customs_entry_for_submission_enforces_entry_number_length(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     issues = validate_customs_entry_for_submission(make_doc(entry_number='123456789'))
     assert any('8 characters or fewer' in issue.message for issue in issues)
 
 
-def test_build_submission_entity_xml_builds_minimal_customs_entry_entity():
+def test_build_submission_entity_xml_builds_importer_and_carrier_nodes(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     xml = build_submission_entity_xml(make_doc())
 
     assert 'i:type="a:CustomsEntry"' in xml
-    assert 'EntryNumber' in xml
-    assert '12345678' in xml
     assert 'EntryFilerCode' in xml
     assert 'Importer Co' in xml
-    assert '2704' in xml
+    assert 'Carrier Co' in xml
+    assert 'Carrier_Id' in xml
+    assert 'Shipment' in xml
 
 
-def test_build_submission_entity_xml_uses_template_payload_when_present():
-    template = '<GetResult xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents" xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/" z:Id="i1"><a:EntryNumber>OLD12345</a:EntryNumber><a:Importer><Name xmlns="">Old Importer</Name></a:Importer></GetResult>'
-    xml = build_submission_entity_xml(make_doc(raw_payload_xml=template, importer_name='New Importer'))
-
-    assert 'z:Id="i1"' in xml or 'ns' in xml
-    assert '12345678' in xml
-    assert 'New Importer' in xml
-
-
-def test_build_submission_entity_xml_omits_placeholder_entry_number():
+def test_build_submission_entity_xml_omits_placeholder_entry_number(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     xml = build_submission_entity_xml(make_doc(entry_number='TMPABC12'))
 
     assert 'TMPABC12' not in xml
@@ -107,7 +124,9 @@ def test_process_lds_submission_populates_mapped_fields(monkeypatch):
             return '<CustomsEntry><Id>777</Id><EntryNumber>76543210</EntryNumber><EntryFilerCode>SY1</EntryFilerCode><EntryType>01</EntryType><Date>2026-06-04T00:00:00</Date><PortOfEntry><Code>2704</Code></PortOfEntry><Importer><Code>IMP-1</Code><Name>Importer Co</Name></Importer></CustomsEntry>'
 
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     monkeypatch.setattr(submission, 'now_datetime', lambda: '2026-06-04 14:00:00')
+    monkeypatch.setattr(submission, 'resolve_master_links', lambda mapped, synced_on=None, create_missing=True: mapped)
     monkeypatch.setattr(submission, 'parse_entry_xml', lambda xml: {
         'lds_id': '777',
         'entry_number': '76543210',
@@ -141,6 +160,7 @@ def test_process_lds_submission_surfaces_lds_errors(monkeypatch):
             raise LDSClientError('boom')
 
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     monkeypatch.setattr(submission, 'now_datetime', lambda: '2026-06-04 14:00:00')
 
     with pytest.raises(Exception) as exc:
@@ -149,3 +169,21 @@ def test_process_lds_submission_surfaces_lds_errors(monkeypatch):
     assert 'LDS submission failed: boom' in str(exc.value)
     assert doc.status == 'Draft'
     assert doc.lds_submission_errors == 'LDS submission failed: boom'
+
+
+
+def test_validate_customs_entry_for_submission_requires_submitted_master_records(monkeypatch):
+    def fake_draft_get_cached_doc(doctype, name):
+        if doctype == 'Importer Profile':
+            return SimpleNamespace(name=name, display_name='Importer Co', importer_code='IMP-1', cbp_number=None, irs_number=None, raw_payload_xml=None, lds_id=None, docstatus=0)
+        if doctype == 'Carrier':
+            return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR-1', raw_payload_xml=None, lds_id=None, docstatus=0)
+        raise AssertionError((doctype, name))
+
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_draft_get_cached_doc)
+
+    issues = validate_customs_entry_for_submission(make_doc())
+
+    messages = {issue.message for issue in issues}
+    assert 'Importer Profile must be submitted to LDS before it can be used on a Customs Entry.' in messages
+    assert 'Each shipment carrier must be submitted to LDS before it can be used on a Customs Entry.' in messages

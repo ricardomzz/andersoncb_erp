@@ -5,3 +5,4 @@
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
 andersoncb_erp.patches.post_model_sync.backfill_synced_customs_entries_as_submitted
+andersoncb_erp.patches.post_model_sync.backfill_party_links

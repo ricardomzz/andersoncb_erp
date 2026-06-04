@@ -8,6 +8,8 @@ from frappe.utils import add_to_date, now_datetime
 
 from andersoncb_erp.integrations.lds import LDSClient
 from andersoncb_erp.services.mapping import parse_entry_xml
+from andersoncb_erp.services.master_data import resolve_master_links
+from andersoncb_erp.services.party_sync import sync_carriers, sync_importer_profiles
 from andersoncb_erp.services.schema import ensure_large_money_columns
 
 STATUS_IDLE = "Idle"
@@ -126,15 +128,18 @@ def _run_sync(settings, mode: str) -> dict[str, Any]:
 	seen_entry_numbers: set[str] = set()
 	_run_status_update(settings, mode, STATUS_RUNNING, started_on=started_on, error=None)
 	try:
+		page_size = int(settings.page_size or 100)
 		rolling_window_days = int(settings.rolling_window_days or 90) if mode == "rolling" else None
-		for summary in client.iter_entry_summaries(page_size=int(settings.page_size or 100), rolling_window_days=rolling_window_days):
+		importers_synced = sync_importer_profiles(settings=settings, client=client, page_size=page_size)
+		carriers_synced = sync_carriers(settings=settings, client=client, page_size=page_size)
+		for summary in client.iter_entry_summaries(page_size=page_size, rolling_window_days=rolling_window_days):
 			doc = _upsert_customs_entry_xml(summary.raw_xml, fallback_filer_code=summary.filer_code or settings.default_filer_code)
 			seen_entry_numbers.add(doc.entry_number)
 			processed += 1
 		archived = _archive_missing_entries(mode=mode, seen_entry_numbers=seen_entry_numbers, rolling_window_days=rolling_window_days)
 		finished_on = now_datetime()
 		_run_status_update(settings, mode, STATUS_SUCCEEDED, finished_on=finished_on, successful_on=finished_on, error=None)
-		return {"mode": mode, "processed": processed, "archived": archived}
+		return {"mode": mode, "processed": processed, "archived": archived, "importers_synced": importers_synced, "carriers_synced": carriers_synced}
 	except Exception as exc:
 		finished_on = now_datetime()
 		_run_status_update(settings, mode, STATUS_FAILED, finished_on=finished_on, error=str(exc))
@@ -168,6 +173,7 @@ def _upsert_customs_entry_xml(entry_xml: str, fallback_filer_code: str | None = 
 	mapped = parse_entry_xml(entry_xml)
 	if fallback_filer_code and not mapped.get('filer_code'):
 		mapped['filer_code'] = fallback_filer_code
+	mapped = resolve_master_links(mapped, synced_on=now_datetime(), create_missing=False)
 	mapped['status'] = derive_entry_status(mapped, source_active=1)
 	mapped['liquidation_status'] = derive_liquidation_status(mapped)
 	entry_number = mapped['entry_number']
@@ -183,12 +189,42 @@ def _upsert_customs_entry_xml(entry_xml: str, fallback_filer_code: str | None = 
 	for child_field in CHILD_TABLE_FIELDS:
 		doc.set(child_field, mapped[child_field])
 	if existing_name:
+		if doc.docstatus == 1:
+			doc.flags.ignore_validate_update_after_submit = True
 		doc.save(ignore_permissions=True)
 	else:
 		doc.insert(ignore_permissions=True)
 	if doc.docstatus == 0:
 		frappe.db.set_value('Customs Entry', doc.name, 'docstatus', 1, update_modified=False)
 		doc.docstatus = 1
+	return doc
+
+
+def relink_master_data_from_existing_entry(doc):
+	if not doc.raw_payload_xml:
+		return doc
+	mapped = parse_entry_xml(doc.raw_payload_xml)
+	mapped = resolve_master_links(mapped, synced_on=doc.last_synced_on or doc.modified, create_missing=False)
+	entry_updates = {}
+	if mapped.get('importer_profile') and doc.importer_profile != mapped.get('importer_profile'):
+		entry_updates['importer_profile'] = mapped.get('importer_profile')
+	if mapped.get('importer_name') and doc.importer_name != mapped.get('importer_name'):
+		entry_updates['importer_name'] = mapped.get('importer_name')
+	if mapped.get('importer_number') and doc.importer_number != mapped.get('importer_number'):
+		entry_updates['importer_number'] = mapped.get('importer_number')
+	if entry_updates:
+		frappe.db.set_value('Customs Entry', doc.name, entry_updates, update_modified=False)
+	for existing_row, mapped_row in zip(doc.get('shipments') or [], mapped.get('shipments') or []):
+		updates = {}
+		carrier_profile = mapped_row.get('carrier_profile')
+		carrier_name = mapped_row.get('carrier')
+		if carrier_profile and existing_row.carrier_profile != carrier_profile:
+			updates['carrier_profile'] = carrier_profile
+		if carrier_name and existing_row.carrier != carrier_name:
+			updates['carrier'] = carrier_name
+		if updates:
+			frappe.db.set_value(existing_row.doctype, existing_row.name, updates, update_modified=False)
+	frappe.db.commit()
 	return doc
 
 

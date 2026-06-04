@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from datetime import date, timedelta
+from typing import Any, Iterable, Sequence
 from xml.etree import ElementTree as ET
 
 import requests
@@ -46,8 +47,20 @@ class LDSEntrySummary:
 
 
 @dataclass
+class LDSDirectoryEntitySummary:
+    entity_id: str | None
+    raw_xml: str
+
+
+@dataclass
 class LDSListPage:
     entries: list[LDSEntrySummary]
+    has_more: bool
+
+
+@dataclass
+class LDSDirectoryListPage:
+    entities: list[LDSDirectoryEntitySummary]
     has_more: bool
 
 
@@ -81,11 +94,46 @@ class LDSClient:
     def fetch_entry_summaries_page(self, position: int, page_size: int, rolling_window_days: int | None = None) -> LDSListPage:
         criteria = build_rolling_window_criteria(rolling_window_days) if rolling_window_days else '[Id] < 999999999999L'
         body = self._build_get_page_body(criteria=criteria, position=position, page_size=page_size)
-        body_element = self._request_xml('http://tempuri.org/IEntityManagerOf_CustomsEntry/GetPage', body)
+        body_element = self._request_manager_xml('CustomsEntryManager', 'http://tempuri.org/IEntityManagerOf_CustomsEntry/GetPage', body)
         entry_elements = extract_entry_elements(body_element)
         entries = [summary_from_entry_element(element) for element in entry_elements]
         entries = [entry for entry in entries if entry.entry_number]
-        return LDSListPage(entries=entries, has_more=len(entries) >= page_size)
+        has_more = ((find_text(body_element, 'HasNext') or '').strip().lower() == 'true') or len(entries) >= page_size
+        return LDSListPage(entries=entries, has_more=has_more)
+
+    def iter_importer_contacts(self, page_size: int):
+        yield from self._iter_directory_entities(
+            manager_name='ContactManager',
+            interface_name='IEntityManagerOf_Contact',
+            entity_local_names=('Contact',),
+            criteria='[RolesIsImporter] = true',
+            page_size=page_size,
+        )
+
+    def iter_carriers(self, page_size: int):
+        yield from self._iter_directory_entities(
+            manager_name='CarrierManager',
+            interface_name='IEntityManagerOf_Carrier',
+            entity_local_names=('Carrier',),
+            criteria='[Id] < 999999999999L',
+            page_size=page_size,
+        )
+
+    def fetch_importer_contact_by_code_xml(self, code: str) -> str:
+        return self._fetch_directory_entity_by_code_xml(
+            manager_name='ContactManager',
+            soap_action_interface_name='IEntityManagerDirectoryOf_Contact',
+            entity_local_names=('Contact', 'GetByCodeResult'),
+            code=code,
+        )
+
+    def fetch_carrier_by_code_xml(self, code: str) -> str:
+        return self._fetch_directory_entity_by_code_xml(
+            manager_name='CarrierManager',
+            soap_action_interface_name='IEntityManagerDirectoryOf_Carrier',
+            entity_local_names=('Carrier', 'GetByCodeResult'),
+            code=code,
+        )
 
     def fetch_entry_detail_xml(self, entry_number: str, filer_code: str | None = None) -> str:
         filer_code = filer_code or self.filer_code
@@ -97,7 +145,7 @@ class LDSClient:
             f'<entryNumber>{xml_escape(entry_number)}</entryNumber>'
             '</GetByEntryNumber>'
         )
-        body_element = self._request_xml('http://tempuri.org/ICustomsEntryManager/GetByEntryNumber', body)
+        body_element = self._request_manager_xml('CustomsEntryManager', 'http://tempuri.org/ICustomsEntryManager/GetByEntryNumber', body)
         entry_elements = extract_entry_elements(body_element)
         if not entry_elements:
             raise LDSClientError('CustomsEntryManager/GetByEntryNumber did not return an entry payload.')
@@ -111,26 +159,90 @@ class LDSClient:
             '<option i:nil="true" xmlns:i="http://www.w3.org/2001/XMLSchema-instance"/>'
             '</Get>'
         )
-        body_element = self._request_xml('http://tempuri.org/IEntityManagerOf_CustomsEntry/Get', body)
+        body_element = self._request_manager_xml('CustomsEntryManager', 'http://tempuri.org/IEntityManagerOf_CustomsEntry/Get', body)
         entry_elements = extract_entry_elements(body_element)
         if not entry_elements:
             raise LDSClientError('CustomsEntryManager/Get did not return an entry payload.')
         return ET.tostring(entry_elements[0], encoding='unicode')
 
     def save_entry_xml(self, entity_xml: str) -> str:
-        body = f'<Save xmlns="{TEMPURI_NS}">{entity_xml}</Save>'
-        body_element = self._request_xml('http://tempuri.org/IEntityManagerOf_CustomsEntry/Save', body)
-        entry_elements = extract_entry_elements(body_element)
-        if not entry_elements:
-            return ET.tostring(body_element, encoding='unicode')
-        return ET.tostring(entry_elements[0], encoding='unicode')
+        return self._save_entity_xml(
+            manager_name='CustomsEntryManager',
+            interface_name='IEntityManagerOf_CustomsEntry',
+            entity_local_names=('CustomsEntry', 'GetResult', 'GetByEntryNumberResult'),
+            entity_xml=entity_xml,
+        )
 
-    def _build_get_page_body(self, criteria: str, position: int, page_size: int) -> str:
+    def save_contact_xml(self, entity_xml: str) -> str:
+        return self._save_entity_xml(
+            manager_name='ContactManager',
+            interface_name='IEntityManagerOf_Contact',
+            entity_local_names=('Contact',),
+            entity_xml=entity_xml,
+        )
+
+    def save_carrier_xml(self, entity_xml: str) -> str:
+        return self._save_entity_xml(
+            manager_name='CarrierManager',
+            interface_name='IEntityManagerOf_Carrier',
+            entity_local_names=('Carrier',),
+            entity_xml=entity_xml,
+        )
+
+    def _save_entity_xml(self, manager_name: str, interface_name: str, entity_local_names: Sequence[str], entity_xml: str) -> str:
+        body = f'<Save xmlns="{TEMPURI_NS}">{entity_xml}</Save>'
+        body_element = self._request_manager_xml(manager_name, f'http://tempuri.org/{interface_name}/Save', body)
+        entities = extract_named_elements(body_element, entity_local_names)
+        if not entities:
+            return ET.tostring(body_element, encoding='unicode')
+        return ET.tostring(entities[0], encoding='unicode')
+
+    def _iter_directory_entities(self, manager_name: str, interface_name: str, entity_local_names: Sequence[str], criteria: str, page_size: int, include: str = '') -> Iterable[LDSDirectoryEntitySummary]:
+        position = 0
+        while True:
+            page = self._fetch_directory_page(manager_name, interface_name, entity_local_names, criteria, page_size, position, include=include)
+            for entity in page.entities:
+                yield entity
+            if not page.has_more:
+                break
+            position += page_size
+
+    def _fetch_directory_entity_by_code_xml(self, manager_name: str, soap_action_interface_name: str, entity_local_names: Sequence[str], code: str, include: str = '') -> str:
+        body = (
+            f'<GetByCode xmlns="{TEMPURI_NS}">'
+            f'<code>{xml_escape(code)}</code>'
+            f'<include>{xml_escape(include or "")}</include>'
+            '</GetByCode>'
+        )
+        body_element = self._request_manager_xml(manager_name, f'http://tempuri.org/{soap_action_interface_name}/GetByCode', body)
+        entities = extract_named_elements(body_element, entity_local_names)
+        if not entities:
+            raise LDSClientError(f'{manager_name}/GetByCode did not return an entity payload.')
+        return ET.tostring(entities[0], encoding='unicode')
+
+    def _fetch_directory_page(
+        self,
+        manager_name: str,
+        interface_name: str,
+        entity_local_names: Sequence[str],
+        criteria: str,
+        page_size: int,
+        position: int,
+        include: str = '',
+    ) -> LDSDirectoryListPage:
+        body = self._build_get_page_body(criteria=criteria, position=position, page_size=page_size, include=include)
+        body_element = self._request_manager_xml(manager_name, f'http://tempuri.org/{interface_name}/GetPage', body)
+        entity_elements = extract_named_elements(body_element, entity_local_names)
+        entities = [LDSDirectoryEntitySummary(entity_id=find_text(element, 'Id'), raw_xml=ET.tostring(element, encoding='unicode')) for element in entity_elements]
+        has_more = ((find_text(body_element, 'HasNext') or '').strip().lower() == 'true') or len(entities) >= page_size
+        return LDSDirectoryListPage(entities=entities, has_more=has_more)
+
+    def _build_get_page_body(self, criteria: str, position: int, page_size: int, include: str = DEFAULT_INCLUDE) -> str:
         return (
             f'<GetPage xmlns="{TEMPURI_NS}">'
             f'<pageQuery xmlns:i="{XSI_NS}">'
             f'<Criteria xmlns="">{xml_escape(criteria)}</Criteria>'
-            f'<Include xmlns="">{xml_escape(DEFAULT_INCLUDE)}</Include>'
+            f'<Include xmlns="">{xml_escape(include or "")}</Include>'
             '<Navigation xmlns="">Refresh</Navigation>'
             '<Option i:nil="true" xmlns=""/>'
             '<Order xmlns=""/>'
@@ -142,9 +254,9 @@ class LDSClient:
             '</pageQuery></GetPage>'
         )
 
-    def _request_xml(self, soap_action: str, body: str) -> ET.Element:
+    def _request_manager_xml(self, manager_name: str, soap_action: str, body: str) -> ET.Element:
         response = requests.post(
-            self._manager_url('CustomsEntryManager'),
+            self._manager_url(manager_name),
             data=self._envelope(body),
             headers={
                 'Content-Type': 'text/xml; charset=utf-8',
@@ -174,7 +286,8 @@ class LDSClient:
 
 
 def build_rolling_window_criteria(rolling_window_days: int) -> str:
-    return f'[Date] >= DateTime.Today.AddDays(-{int(rolling_window_days)})'
+    start_date = date.today() - timedelta(days=int(rolling_window_days))
+    return f'[Date] >= #{start_date.isoformat()}#'
 
 
 def xml_escape(value: Any) -> str:
@@ -229,11 +342,19 @@ def extract_validation_error_details(fault_element: ET.Element) -> list[LDSValid
 
 
 def extract_entry_elements(root: ET.Element) -> list[ET.Element]:
-    entries = []
+    return extract_named_elements(root, ('CustomsEntry', 'GetResult', 'GetByEntryNumberResult'), predicate=lambda e: has_descendant_text(e, 'EntryNumber'))
+
+
+def extract_named_elements(root: ET.Element, local_names: Sequence[str], predicate=None) -> list[ET.Element]:
+    names = set(local_names)
+    elements: list[ET.Element] = []
     for element in root.iter():
-        if localname(element.tag) in {'CustomsEntry', 'GetResult', 'GetByEntryNumberResult'} and has_descendant_text(element, 'EntryNumber'):
-            entries.append(element)
-    return dedupe_entry_elements(entries)
+        if localname(element.tag) not in names:
+            continue
+        if predicate and not predicate(element):
+            continue
+        elements.append(element)
+    return dedupe_named_elements(elements)
 
 
 def summary_from_entry_element(element: ET.Element) -> LDSEntrySummary:
@@ -245,12 +366,12 @@ def summary_from_entry_element(element: ET.Element) -> LDSEntrySummary:
     )
 
 
-def dedupe_entry_elements(elements: list[ET.Element]) -> list[ET.Element]:
+def dedupe_named_elements(elements: list[ET.Element]) -> list[ET.Element]:
     seen = set()
     result = []
     for element in elements:
-        key = (find_text(element, 'EntryNumber'), find_text(element, 'Id'))
-        if not key[0] or key in seen:
+        key = (localname(element.tag), find_text(element, 'EntryNumber') or find_text(element, 'Id') or str(id(element)))
+        if key in seen:
             continue
         seen.add(key)
         result.append(element)

@@ -16,6 +16,7 @@
     "liquidation_status",
     "entry_date",
     "client_ref",
+    "importer_profile",
     "importer_name",
     "created_by",
     "lds_id",
@@ -93,10 +94,18 @@
       "in_list_view": 1
     },
     {
+      "fieldname": "importer_profile",
+      "fieldtype": "Link",
+      "label": "Importer Profile",
+      "options": "Importer Profile",
+      "in_list_view": 0
+    },
+    {
       "fieldname": "importer_name",
       "fieldtype": "Data",
       "label": "Importer",
-      "in_list_view": 1
+      "in_list_view": 1,
+      "read_only": 1
     },
     {
       "fieldname": "created_by",
@@ -206,7 +215,8 @@
     {
       "fieldname": "importer_number",
       "fieldtype": "Data",
-      "label": "Importer Number"
+      "label": "Importer Number",
+      "read_only": 1
     },
     {
       "fieldname": "consignee_name",

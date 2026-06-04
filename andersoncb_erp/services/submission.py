@@ -13,6 +13,7 @@ from frappe.utils import now_datetime
 
 from andersoncb_erp.integrations.lds import LDSClientError, LDSValidationError, XSI_NS
 from andersoncb_erp.services.mapping import parse_entry_xml
+from andersoncb_erp.services.master_data import resolve_master_links
 from andersoncb_erp.services.sync import (
 	CHILD_TABLE_FIELDS as SYNC_CHILD_TABLE_FIELDS,
 	derive_entry_status,
@@ -56,6 +57,7 @@ def validate_customs_entry_for_submission(doc) -> list[LocalValidationIssue]:
 		("entry_type", "Entry Type is required."),
 		("entry_date", "Entry Date is required."),
 		("port_of_entry", "Port of Entry is required."),
+		("importer_profile", "Importer Profile is required."),
 	)
 	for fieldname, message in required_fields:
 		value = getattr(doc, fieldname, None)
@@ -68,12 +70,28 @@ def validate_customs_entry_for_submission(doc) -> list[LocalValidationIssue]:
 	if entry_number and not is_draft_placeholder_entry_number(entry_number) and len(entry_number) > 8:
 		issues.append(LocalValidationIssue("entry_number", "Entry Number must be 8 characters or fewer for LDS submission."))
 
-	if not (getattr(doc, "importer_name", None) or getattr(doc, "importer_number", None)):
-		issues.append(LocalValidationIssue("importer_name", "Importer Name or Importer Number is required."))
+	if getattr(doc, 'importer_profile', None):
+		profile = frappe.get_cached_doc('Importer Profile', doc.importer_profile)
+		if profile.docstatus != 1 or not profile.lds_id:
+			issues.append(LocalValidationIssue('importer_profile', 'Importer Profile must be submitted to LDS before it can be used on a Customs Entry.'))
+		if not (profile.importer_code or profile.cbp_number or profile.irs_number):
+			issues.append(LocalValidationIssue('importer_profile', 'Importer Profile must have an importer code, CBP number, or IRS number.'))
+		if not profile.display_name:
+			issues.append(LocalValidationIssue('importer_profile', 'Importer Profile must have a display name.'))
 
 	for row in getattr(doc, "shipments", []) or []:
 		if not getattr(row, "shipment_no", None):
 			issues.append(LocalValidationIssue("shipments", "Each shipment row must have a Shipment No."))
+			break
+		if not getattr(row, 'carrier_profile', None):
+			issues.append(LocalValidationIssue('shipments', 'Each shipment row must have a Carrier Profile.'))
+			break
+		carrier = frappe.get_cached_doc('Carrier', row.carrier_profile)
+		if carrier.docstatus != 1 or not carrier.lds_id:
+			issues.append(LocalValidationIssue('shipments', 'Each shipment carrier must be submitted to LDS before it can be used on a Customs Entry.'))
+			break
+		if not (carrier.display_name or carrier.carrier_code):
+			issues.append(LocalValidationIssue('shipments', 'Each shipment carrier must have a display name or carrier code.'))
 			break
 
 	for row in getattr(doc, "invoices", []) or []:
@@ -112,8 +130,9 @@ def build_submission_entity_xml(doc) -> str:
 	_set_text(entity, "SuretyCode", doc.bond_number, DOCUMENTS_NS)
 	_set_text(entity, "ClientRef", doc.client_ref, DOCUMENTS_NS)
 	_set_port_of_entry(entity, doc.port_of_entry)
-	_set_importer(entity, doc.importer_name, doc.importer_number)
+	_set_importer_from_profile(entity, doc.importer_profile)
 	_set_consignee(entity, doc.consignee_name)
+	_set_shipments(entity, doc.shipments or [])
 
 	return ET.tostring(entity, encoding="unicode")
 
@@ -143,7 +162,7 @@ def process_lds_submission(doc) -> None:
 		doc.lds_submission_errors = message
 		raise frappe.ValidationError(message)
 
-	mapped = parse_entry_xml(saved_xml)
+	mapped = resolve_master_links(parse_entry_xml(saved_xml), synced_on=now_datetime(), create_missing=False)
 	mapped["status"] = derive_entry_status(mapped, source_active=1)
 	mapped["liquidation_status"] = derive_liquidation_status(mapped)
 
@@ -236,6 +255,13 @@ def _set_text(parent: ET.Element, local_name: str, value: Any, namespace: str) -
 	element.text = str(value)
 
 
+def _replace_child(parent: ET.Element, local_name: str, replacement: ET.Element):
+	existing = _find_child(parent, local_name)
+	if existing is not None:
+		parent.remove(existing)
+	parent.append(replacement)
+
+
 def _set_port_of_entry(parent: ET.Element, port_code: str | None) -> None:
 	if not port_code:
 		return
@@ -248,22 +274,78 @@ def _set_port_of_entry(parent: ET.Element, port_code: str | None) -> None:
 	code.text = port_code
 
 
-def _set_importer(parent: ET.Element, importer_name: str | None, importer_number: str | None) -> None:
-	if not (importer_name or importer_number):
+def _set_importer_from_profile(parent: ET.Element, importer_profile_name: str | None) -> None:
+	if not importer_profile_name:
 		return
-	importer = _find_child(parent, "Importer")
-	if importer is None:
-		importer = ET.SubElement(parent, f"{{{DOCUMENTS_NS}}}Importer")
-	if importer_number:
-		code = _find_direct_child(importer, "Code")
-		if code is None:
-			code = ET.SubElement(importer, "Code")
-		code.text = importer_number
-	if importer_name:
-		name = _find_direct_child(importer, "Name")
-		if name is None:
-			name = ET.SubElement(importer, "Name")
-		name.text = importer_name
+	profile = frappe.get_cached_doc('Importer Profile', importer_profile_name)
+	importer = _build_directory_entity(
+		local_name='Importer',
+		raw_payload_xml=profile.raw_payload_xml,
+		lds_id=profile.lds_id,
+		code=profile.importer_code or profile.cbp_number or profile.irs_number,
+		name=profile.display_name,
+	)
+	if importer is not None:
+		_replace_child(parent, 'Importer', importer)
+
+
+def _set_shipments(parent: ET.Element, shipments) -> None:
+	container = _find_child(parent, 'Shipments')
+	if container is not None:
+		parent.remove(container)
+	container = ET.SubElement(parent, f'{{{DOCUMENTS_NS}}}Shipments')
+	for row in shipments:
+		shipment = ET.SubElement(container, f'{{{DOCUMENTS_NS}}}Shipment')
+		_set_text(shipment, 'Number', getattr(row, 'shipment_no', None), DOCUMENTS_NS)
+		_set_text(shipment, 'TransportationMode', getattr(row, 'mode', None), DOCUMENTS_NS)
+		_set_text(shipment, 'DateOfImport', _as_datetime_text(getattr(row, 'arrival_date', None)), DOCUMENTS_NS)
+		_set_port_of_entry_on_shipment(shipment, getattr(row, 'destination', None))
+		_set_carrier_on_shipment(shipment, getattr(row, 'carrier_profile', None))
+
+
+def _set_port_of_entry_on_shipment(shipment: ET.Element, port_code: str | None) -> None:
+	if not port_code:
+		return
+	port = ET.SubElement(shipment, f'{{{DOCUMENTS_NS}}}PortOfEntry')
+	code = ET.SubElement(port, 'Code')
+	code.text = port_code
+
+
+def _set_carrier_on_shipment(shipment: ET.Element, carrier_profile_name: str | None) -> None:
+	if not carrier_profile_name:
+		return
+	carrier = frappe.get_cached_doc('Carrier', carrier_profile_name)
+	if carrier.lds_id:
+		_set_text(shipment, 'Carrier_Id', carrier.lds_id, DOCUMENTS_NS)
+	carrier_node = _build_directory_entity(
+		local_name='Carrier',
+		raw_payload_xml=carrier.raw_payload_xml,
+		lds_id=carrier.lds_id,
+		code=carrier.carrier_code,
+		name=carrier.display_name,
+	)
+	if carrier_node is not None:
+		shipment.append(carrier_node)
+
+
+def _build_directory_entity(local_name: str, raw_payload_xml: str | None, lds_id: str | None, code: str | None, name: str | None) -> ET.Element | None:
+	root = None
+	if raw_payload_xml:
+		try:
+			root = ET.fromstring(raw_payload_xml)
+		except ET.ParseError:
+			root = None
+	if root is None:
+		if not any([lds_id, code, name]):
+			return None
+		root = ET.Element(f'{{{DOCUMENTS_NS}}}{local_name}')
+	if lds_id:
+		_set_text(root, 'Id', lds_id, DOCUMENTS_NS)
+	if code:
+		_set_text(root, 'Code', code, DOCUMENTS_NS)
+	if name:
+		_set_text(root, 'Name', name, DOCUMENTS_NS)
+	return root
 
 
 def _set_consignee(parent: ET.Element, consignee_name: str | None) -> None:
@@ -319,6 +401,7 @@ def create_draft_from_entry(source_name: str) -> str:
 		"entry_type",
 		"port_of_entry",
 		"transport_mode",
+		"importer_profile",
 		"importer_name",
 		"client_ref",
 		"importer_number",

@@ -1,5 +1,6 @@
 import frappe
 
+from andersoncb_erp.services.party_submission import submit_carrier_to_lds, submit_importer_profile_to_lds
 from andersoncb_erp.services.submission import create_draft_from_entry, submit_entry_to_lds
 from andersoncb_erp.services.sync import (
     refresh_customs_entry,
@@ -31,6 +32,16 @@ def create_entry_draft(source_name: str):
 @frappe.whitelist()
 def submit_entry(name: str):
     return submit_entry_to_lds(name)
+
+
+@frappe.whitelist()
+def submit_importer_profile(name: str):
+    return submit_importer_profile_to_lds(name)
+
+
+@frappe.whitelist()
+def submit_carrier(name: str):
+    return submit_carrier_to_lds(name)
 
 
 @frappe.whitelist()
