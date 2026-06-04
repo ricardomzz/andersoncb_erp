@@ -1,0 +1,60 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Entry Shipment",
+  "module": "Customs Entries",
+  "editable_grid": 1,
+  "istable": 1,
+  "field_order": [
+    "shipment_no",
+    "mode",
+    "carrier",
+    "voyage_or_flight",
+    "origin",
+    "destination",
+    "arrival_date"
+  ],
+  "fields": [
+    {
+      "fieldname": "shipment_no",
+      "fieldtype": "Data",
+      "label": "Shipment No",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "mode",
+      "fieldtype": "Data",
+      "label": "Mode",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "carrier",
+      "fieldtype": "Data",
+      "label": "Carrier"
+    },
+    {
+      "fieldname": "voyage_or_flight",
+      "fieldtype": "Data",
+      "label": "Voyage / Flight"
+    },
+    {
+      "fieldname": "origin",
+      "fieldtype": "Data",
+      "label": "Origin"
+    },
+    {
+      "fieldname": "destination",
+      "fieldtype": "Data",
+      "label": "Destination"
+    },
+    {
+      "fieldname": "arrival_date",
+      "fieldtype": "Date",
+      "label": "Arrival Date"
+    }
+  ],
+  "permissions": []
+}

@@ -1,0 +1,36 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Entry Reference",
+  "module": "Customs Entries",
+  "editable_grid": 1,
+  "istable": 1,
+  "field_order": [
+    "reference_type",
+    "reference_value",
+    "description"
+  ],
+  "fields": [
+    {
+      "fieldname": "reference_type",
+      "fieldtype": "Data",
+      "label": "Reference Type",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "reference_value",
+      "fieldtype": "Data",
+      "label": "Reference Value",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Small Text",
+      "label": "Description"
+    }
+  ],
+  "permissions": []
+}

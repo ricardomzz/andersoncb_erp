@@ -1,0 +1,48 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Entry Invoice",
+  "module": "Customs Entries",
+  "editable_grid": 1,
+  "istable": 1,
+  "field_order": [
+    "invoice_number",
+    "invoice_date",
+    "currency",
+    "invoice_amount",
+    "vendor_name"
+  ],
+  "fields": [
+    {
+      "fieldname": "invoice_number",
+      "fieldtype": "Data",
+      "label": "Invoice Number",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "invoice_date",
+      "fieldtype": "Date",
+      "label": "Invoice Date"
+    },
+    {
+      "fieldname": "currency",
+      "fieldtype": "Data",
+      "label": "Currency"
+    },
+    {
+      "fieldname": "invoice_amount",
+      "fieldtype": "Float",
+      "label": "Invoice Amount",
+      "precision": "2"
+    },
+    {
+      "fieldname": "vendor_name",
+      "fieldtype": "Data",
+      "label": "Vendor Name"
+    }
+  ],
+  "permissions": []
+}

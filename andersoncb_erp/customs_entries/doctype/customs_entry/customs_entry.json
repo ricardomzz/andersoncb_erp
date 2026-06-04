@@ -1,0 +1,308 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Customs Entry",
+  "module": "Customs Entries",
+  "autoname": "",
+  "search_fields": "entry_number,filer_code,client_ref,importer_name",
+  "track_changes": 1,
+  "field_order": [
+    "filer_code",
+    "entry_number",
+    "status",
+    "liquidation_status",
+    "entry_date",
+    "client_ref",
+    "importer_name",
+    "created_by",
+    "lds_id",
+    "last_lds_submission_on",
+    "lds_submission_errors",
+    "lds_last_submission_payload",
+    "source_active",
+    "archived_on",
+    "last_seen_in_source_on",
+    "last_synced_on",
+    "entry_section",
+    "filing_date",
+    "release_date",
+    "liquidation_date",
+    "entry_type",
+    "port_of_entry",
+    "transport_mode",
+    "party_section",
+    "importer_number",
+    "consignee_name",
+    "reference_section",
+    "broker_reference",
+    "bond_number",
+    "house_bill",
+    "master_bill",
+    "total_entered_value",
+    "currency",
+    "shipments",
+    "invoices",
+    "fees",
+    "events",
+    "tariff_lines",
+    "references",
+    "raw_payload_xml"
+  ],
+  "fields": [
+    {
+      "fieldname": "filer_code",
+      "fieldtype": "Data",
+      "label": "Filer Code",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "entry_number",
+      "fieldtype": "Data",
+      "label": "Entry Number",
+      "reqd": 0,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Data",
+      "label": "Status",
+      "in_list_view": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "liquidation_status",
+      "fieldtype": "Data",
+      "label": "Liquidation Status",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "entry_date",
+      "fieldtype": "Date",
+      "label": "Entry Date",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "client_ref",
+      "fieldtype": "Data",
+      "label": "Client Ref",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "importer_name",
+      "fieldtype": "Data",
+      "label": "Importer",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "created_by",
+      "fieldtype": "Data",
+      "label": "Created By",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "lds_id",
+      "fieldtype": "Data",
+      "label": "LDS Id",
+      "hidden": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_lds_submission_on",
+      "fieldtype": "Datetime",
+      "label": "Last LDS Submission On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "lds_submission_errors",
+      "fieldtype": "Small Text",
+      "label": "LDS Submission Errors",
+      "read_only": 1
+    },
+    {
+      "fieldname": "lds_last_submission_payload",
+      "fieldtype": "Code",
+      "label": "Last LDS Submission Payload",
+      "options": "XML",
+      "hidden": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "source_active",
+      "fieldtype": "Check",
+      "label": "Source Active",
+      "default": "1",
+      "in_list_view": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "archived_on",
+      "fieldtype": "Datetime",
+      "label": "Archived On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_seen_in_source_on",
+      "fieldtype": "Datetime",
+      "label": "Last Seen In Source On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_synced_on",
+      "fieldtype": "Datetime",
+      "label": "Last Synced On",
+      "in_list_view": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "entry_section",
+      "fieldtype": "Section Break",
+      "label": "Entry Details"
+    },
+    {
+      "fieldname": "filing_date",
+      "fieldtype": "Date",
+      "label": "Filing Date"
+    },
+    {
+      "fieldname": "release_date",
+      "fieldtype": "Date",
+      "label": "Release Date",
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "liquidation_date",
+      "fieldtype": "Date",
+      "label": "Liquidation Date",
+      "read_only": 1
+    },
+    {
+      "fieldname": "entry_type",
+      "fieldtype": "Data",
+      "label": "Entry Type",
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "port_of_entry",
+      "fieldtype": "Data",
+      "label": "Port Of Entry",
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "transport_mode",
+      "fieldtype": "Data",
+      "label": "Transport Mode"
+    },
+    {
+      "fieldname": "party_section",
+      "fieldtype": "Section Break",
+      "label": "Parties"
+    },
+    {
+      "fieldname": "importer_number",
+      "fieldtype": "Data",
+      "label": "Importer Number"
+    },
+    {
+      "fieldname": "consignee_name",
+      "fieldtype": "Data",
+      "label": "Consignee Name"
+    },
+    {
+      "fieldname": "reference_section",
+      "fieldtype": "Section Break",
+      "label": "References"
+    },
+    {
+      "fieldname": "broker_reference",
+      "fieldtype": "Data",
+      "label": "Broker Reference"
+    },
+    {
+      "fieldname": "bond_number",
+      "fieldtype": "Data",
+      "label": "Bond Number"
+    },
+    {
+      "fieldname": "house_bill",
+      "fieldtype": "Data",
+      "label": "House Bill"
+    },
+    {
+      "fieldname": "master_bill",
+      "fieldtype": "Data",
+      "label": "Master Bill"
+    },
+    {
+      "fieldname": "total_entered_value",
+      "fieldtype": "Float",
+      "label": "Total Entered Value",
+      "precision": "2"
+    },
+    {
+      "fieldname": "currency",
+      "fieldtype": "Data",
+      "label": "Currency"
+    },
+    {
+      "fieldname": "shipments",
+      "fieldtype": "Table",
+      "label": "Shipments",
+      "options": "Entry Shipment"
+    },
+    {
+      "fieldname": "invoices",
+      "fieldtype": "Table",
+      "label": "Invoices",
+      "options": "Entry Invoice"
+    },
+    {
+      "fieldname": "fees",
+      "fieldtype": "Table",
+      "label": "Fees",
+      "options": "Entry Fee"
+    },
+    {
+      "fieldname": "events",
+      "fieldtype": "Table",
+      "label": "Events",
+      "options": "Entry Event"
+    },
+    {
+      "fieldname": "tariff_lines",
+      "fieldtype": "Table",
+      "label": "Tariff Lines",
+      "options": "Entry Tariff Line"
+    },
+    {
+      "fieldname": "references",
+      "fieldtype": "Table",
+      "label": "References",
+      "options": "Entry Reference"
+    },
+    {
+      "fieldname": "raw_payload_xml",
+      "fieldtype": "Code",
+      "label": "Raw Payload XML",
+      "options": "XML",
+      "hidden": 1,
+      "read_only": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1
+    }
+  ],
+  "is_submittable": 1
+}

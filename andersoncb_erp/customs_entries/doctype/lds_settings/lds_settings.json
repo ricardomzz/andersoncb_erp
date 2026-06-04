@@ -1,0 +1,163 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "LDS Settings",
+  "module": "Customs Entries",
+  "issingle": 1,
+  "document_type": "Setup",
+  "field_order": [
+    "connection_section",
+    "endpoint_url",
+    "column_break_connection",
+    "username",
+    "password",
+    "default_filer_code",
+    "sync_section",
+    "sync_enabled",
+    "sync_frequency_minutes",
+    "rolling_window_days",
+    "page_size",
+    "status_section",
+    "last_full_sync_started_on",
+    "last_full_sync_finished_on",
+    "last_full_sync_status",
+    "last_full_sync_error",
+    "last_window_sync_started_on",
+    "last_window_sync_finished_on",
+    "last_window_sync_status",
+    "last_window_sync_error"
+  ],
+  "fields": [
+    {
+      "fieldname": "connection_section",
+      "fieldtype": "Section Break",
+      "label": "Connection"
+    },
+    {
+      "fieldname": "endpoint_url",
+      "fieldtype": "Data",
+      "label": "Endpoint URL",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_connection",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "username",
+      "fieldtype": "Data",
+      "label": "Username",
+      "reqd": 1
+    },
+    {
+      "fieldname": "password",
+      "fieldtype": "Password",
+      "label": "Password",
+      "reqd": 1
+    },
+    {
+      "fieldname": "default_filer_code",
+      "fieldtype": "Data",
+      "label": "Default Filer Code"
+    },
+    {
+      "fieldname": "sync_section",
+      "fieldtype": "Section Break",
+      "label": "Sync Controls"
+    },
+    {
+      "fieldname": "sync_enabled",
+      "fieldtype": "Check",
+      "label": "Enable Scheduled Rolling Sync",
+      "default": "1"
+    },
+    {
+      "fieldname": "sync_frequency_minutes",
+      "fieldtype": "Int",
+      "label": "Sync Frequency (Minutes)",
+      "default": "15",
+      "reqd": 1
+    },
+    {
+      "fieldname": "rolling_window_days",
+      "fieldtype": "Int",
+      "label": "Rolling Window (Days)",
+      "default": "90",
+      "reqd": 1
+    },
+    {
+      "fieldname": "page_size",
+      "fieldtype": "Int",
+      "label": "Page Size",
+      "default": "100",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status_section",
+      "fieldtype": "Section Break",
+      "label": "Sync Status"
+    },
+    {
+      "fieldname": "last_full_sync_started_on",
+      "fieldtype": "Datetime",
+      "label": "Last Full Sync Started On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_full_sync_finished_on",
+      "fieldtype": "Datetime",
+      "label": "Last Full Sync Finished On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_full_sync_status",
+      "fieldtype": "Select",
+      "label": "Last Full Sync Status",
+      "options": "Idle\nRunning\nSucceeded\nFailed",
+      "default": "Idle",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_full_sync_error",
+      "fieldtype": "Small Text",
+      "label": "Last Full Sync Error",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_window_sync_started_on",
+      "fieldtype": "Datetime",
+      "label": "Last Rolling Sync Started On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_window_sync_finished_on",
+      "fieldtype": "Datetime",
+      "label": "Last Rolling Sync Finished On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_window_sync_status",
+      "fieldtype": "Select",
+      "label": "Last Rolling Sync Status",
+      "options": "Idle\nRunning\nSucceeded\nFailed",
+      "default": "Idle",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_window_sync_error",
+      "fieldtype": "Small Text",
+      "label": "Last Rolling Sync Error",
+      "read_only": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1
+    }
+  ]
+}

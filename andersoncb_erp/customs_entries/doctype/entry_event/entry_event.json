@@ -1,0 +1,41 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Entry Event",
+  "module": "Customs Entries",
+  "editable_grid": 1,
+  "istable": 1,
+  "field_order": [
+    "event_code",
+    "event_name",
+    "event_timestamp",
+    "details"
+  ],
+  "fields": [
+    {
+      "fieldname": "event_code",
+      "fieldtype": "Data",
+      "label": "Event Code",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "event_name",
+      "fieldtype": "Data",
+      "label": "Event Name"
+    },
+    {
+      "fieldname": "event_timestamp",
+      "fieldtype": "Datetime",
+      "label": "Event Timestamp"
+    },
+    {
+      "fieldname": "details",
+      "fieldtype": "Small Text",
+      "label": "Details"
+    }
+  ],
+  "permissions": []
+}

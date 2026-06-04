@@ -1,0 +1,68 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Entry Tariff Line",
+  "module": "Customs Entries",
+  "editable_grid": 1,
+  "istable": 1,
+  "field_order": [
+    "line_no",
+    "hs_code",
+    "description",
+    "quantity",
+    "uom",
+    "entered_value",
+    "duty_amount",
+    "country_of_origin"
+  ],
+  "fields": [
+    {
+      "fieldname": "line_no",
+      "fieldtype": "Data",
+      "label": "Line No",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "hs_code",
+      "fieldtype": "Data",
+      "label": "HS Code",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Small Text",
+      "label": "Description"
+    },
+    {
+      "fieldname": "quantity",
+      "fieldtype": "Float",
+      "label": "Quantity"
+    },
+    {
+      "fieldname": "uom",
+      "fieldtype": "Data",
+      "label": "UOM"
+    },
+    {
+      "fieldname": "entered_value",
+      "fieldtype": "Float",
+      "label": "Entered Value",
+      "precision": "2"
+    },
+    {
+      "fieldname": "duty_amount",
+      "fieldtype": "Float",
+      "label": "Duty Amount",
+      "precision": "2"
+    },
+    {
+      "fieldname": "country_of_origin",
+      "fieldtype": "Data",
+      "label": "Country Of Origin"
+    }
+  ],
+  "permissions": []
+}

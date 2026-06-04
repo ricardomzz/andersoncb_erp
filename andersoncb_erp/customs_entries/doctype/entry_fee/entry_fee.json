@@ -1,0 +1,42 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Entry Fee",
+  "module": "Customs Entries",
+  "editable_grid": 1,
+  "istable": 1,
+  "field_order": [
+    "fee_type",
+    "amount",
+    "currency",
+    "description"
+  ],
+  "fields": [
+    {
+      "fieldname": "fee_type",
+      "fieldtype": "Data",
+      "label": "Fee Type",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "amount",
+      "fieldtype": "Float",
+      "label": "Amount",
+      "precision": "2"
+    },
+    {
+      "fieldname": "currency",
+      "fieldtype": "Data",
+      "label": "Currency"
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Small Text",
+      "label": "Description"
+    }
+  ],
+  "permissions": []
+}
