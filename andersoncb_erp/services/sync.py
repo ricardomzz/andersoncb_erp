@@ -18,7 +18,7 @@ STATUS_RUNNING = "Running"
 STATUS_SUCCEEDED = "Succeeded"
 STATUS_FAILED = "Failed"
 
-CHILD_TABLE_FIELDS = ("shipments", "invoices", "fees", "events", "tariff_lines", "references")
+CHILD_TABLE_FIELDS = ("shipments", "invoices", "articles", "fees", "events", "tariff_lines", "references")
 
 
 def normalize_source_status(value: str | None) -> str | None:
@@ -192,7 +192,7 @@ def _upsert_customs_entry_xml(entry_xml: str, fallback_filer_code: str | None = 
 	mapped = parse_entry_xml(entry_xml)
 	if fallback_filer_code and not mapped.get('filer_code'):
 		mapped['filer_code'] = fallback_filer_code
-	mapped = resolve_master_links(mapped, synced_on=now_datetime(), create_missing=False)
+	mapped = resolve_master_links(mapped, synced_on=now_datetime(), create_missing=True)
 	mapped['status'] = derive_entry_status(mapped, source_active=1)
 	mapped['psc_status'] = derive_psc_status(mapped)
 	mapped['liquidation_status'] = derive_liquidation_status(mapped)
@@ -224,7 +224,7 @@ def relink_master_data_from_existing_entry(doc):
 	if not doc.raw_payload_xml:
 		return doc
 	mapped = parse_entry_xml(doc.raw_payload_xml)
-	mapped = resolve_master_links(mapped, synced_on=doc.last_synced_on or doc.modified, create_missing=False)
+	mapped = resolve_master_links(mapped, synced_on=doc.last_synced_on or doc.modified, create_missing=True)
 	entry_updates = {}
 	if mapped.get('importer_profile') and doc.importer_profile != mapped.get('importer_profile'):
 		entry_updates['importer_profile'] = mapped.get('importer_profile')

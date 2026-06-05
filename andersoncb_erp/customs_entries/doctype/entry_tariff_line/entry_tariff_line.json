@@ -10,6 +10,9 @@
   "istable": 1,
   "field_order": [
     "line_no",
+    "article_line_no",
+    "shipment_no",
+    "invoice_number",
     "hs_code",
     "description",
     "quantity",
@@ -24,6 +27,21 @@
       "fieldtype": "Data",
       "label": "Line No",
       "in_list_view": 1
+    },
+    {
+      "fieldname": "article_line_no",
+      "fieldtype": "Data",
+      "label": "Article Line No"
+    },
+    {
+      "fieldname": "shipment_no",
+      "fieldtype": "Data",
+      "label": "Shipment No"
+    },
+    {
+      "fieldname": "invoice_number",
+      "fieldtype": "Data",
+      "label": "Invoice Number"
     },
     {
       "fieldname": "hs_code",

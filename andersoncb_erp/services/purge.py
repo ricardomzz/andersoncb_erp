@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import frappe
 
-ENTRY_CHILD_FIELDS = ("shipments", "invoices", "fees", "events", "tariff_lines", "references")
+ENTRY_CHILD_FIELDS = ("shipments", "invoices", "articles", "fees", "events", "tariff_lines", "references")
 
 
 def purge_lds_synced_data() -> dict[str, int]:

@@ -12,7 +12,10 @@
     "fee_type",
     "amount",
     "currency",
-    "description"
+    "description",
+    "shipment_no",
+    "invoice_number",
+    "article_line_no"
   ],
   "fields": [
     {
@@ -36,6 +39,21 @@
       "fieldname": "description",
       "fieldtype": "Small Text",
       "label": "Description"
+    },
+    {
+      "fieldname": "shipment_no",
+      "fieldtype": "Data",
+      "label": "Shipment No"
+    },
+    {
+      "fieldname": "invoice_number",
+      "fieldtype": "Data",
+      "label": "Invoice Number"
+    },
+    {
+      "fieldname": "article_line_no",
+      "fieldtype": "Data",
+      "label": "Article Line No"
     }
   ],
   "permissions": []

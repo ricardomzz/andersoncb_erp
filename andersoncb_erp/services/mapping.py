@@ -53,6 +53,7 @@ def parse_entry_xml(entry_xml: str) -> dict[str, Any]:
 		'importer_profile_data': importer_profile_data,
 		'shipments': map_shipments(root, ref_index),
 		'invoices': invoices,
+		'articles': map_articles(root, ref_index),
 		'fees': map_fees(root, ref_index),
 		'events': map_events(root, ref_index),
 		'tariff_lines': map_tariff_lines(root, ref_index),
@@ -296,27 +297,77 @@ def map_shipments(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[di
 
 def map_invoices(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[str, Any]]:
 	rows = []
-	for invoice in descendants(root, 'ShipmentInvoice', ref_index=ref_index):
-		rows.append({
-			'invoice_number': child_text(invoice, 'InvoiceNumber', ref_index=ref_index) or child_text(invoice, 'InvoiceNo', ref_index=ref_index) or child_text(invoice, 'Number', ref_index=ref_index) or child_text(invoice, 'Line', ref_index=ref_index) or child_text(invoice, 'Id', ref_index=ref_index),
-			'invoice_date': to_date_string(child_text(invoice, 'Date', ref_index=ref_index) or child_text(invoice, 'InvoiceDate', ref_index=ref_index)),
-			'currency': child_text(invoice, 'InvoiceValueCurrency', ref_index=ref_index) or child_text(invoice, 'Currency', ref_index=ref_index),
-			'invoice_amount': to_float(child_text(invoice, 'InvoiceValue', ref_index=ref_index) or child_text(invoice, 'InvoiceAmount', ref_index=ref_index)),
-			'vendor_name': first_nested_text(invoice, [('Seller', 'Name')], ref_index=ref_index),
-		})
-	return dedupe_rows(rows, 'invoice_number')
+	for shipment in collection_children(root, 'Shipments', 'Shipment', ref_index=ref_index):
+		shipment_no = child_text(shipment, 'ShipmentNo', ref_index=ref_index) or child_text(shipment, 'ShipmentNumber', ref_index=ref_index) or child_text(shipment, 'Number', ref_index=ref_index) or child_text(shipment, 'Id', ref_index=ref_index)
+		for invoice in collection_children(shipment, 'Invoices', 'ShipmentInvoice', ref_index=ref_index):
+			rows.append({
+				'invoice_number': child_text(invoice, 'InvoiceNumber', ref_index=ref_index) or child_text(invoice, 'InvoiceNo', ref_index=ref_index) or child_text(invoice, 'Number', ref_index=ref_index) or child_text(invoice, 'Line', ref_index=ref_index) or child_text(invoice, 'Id', ref_index=ref_index),
+				'shipment_no': shipment_no,
+				'invoice_date': to_date_string(child_text(invoice, 'Date', ref_index=ref_index) or child_text(invoice, 'InvoiceDate', ref_index=ref_index)),
+				'currency': child_text(invoice, 'InvoiceValueCurrency', ref_index=ref_index) or child_text(invoice, 'Currency', ref_index=ref_index),
+				'invoice_amount': to_float(child_text(invoice, 'InvoiceValue', ref_index=ref_index) or child_text(invoice, 'InvoiceAmount', ref_index=ref_index)),
+				'vendor_name': first_nested_text(invoice, [('Seller', 'Name')], ref_index=ref_index),
+			})
+	return dedupe_invoice_rows(rows)
 
+
+
+def map_articles(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[str, Any]]:
+	rows = []
+	for shipment in collection_children(root, 'Shipments', 'Shipment', ref_index=ref_index):
+		shipment_no = child_text(shipment, 'ShipmentNo', ref_index=ref_index) or child_text(shipment, 'ShipmentNumber', ref_index=ref_index) or child_text(shipment, 'Number', ref_index=ref_index) or child_text(shipment, 'Id', ref_index=ref_index)
+		for invoice in collection_children(shipment, 'Invoices', 'ShipmentInvoice', ref_index=ref_index):
+			invoice_number = child_text(invoice, 'InvoiceNumber', ref_index=ref_index) or child_text(invoice, 'InvoiceNo', ref_index=ref_index) or child_text(invoice, 'Number', ref_index=ref_index) or child_text(invoice, 'Line', ref_index=ref_index) or child_text(invoice, 'Id', ref_index=ref_index)
+			for article in collection_children(invoice, 'Articles', 'ShipmentArticle', ref_index=ref_index):
+				rows.append({
+					'article_line_no': child_text(article, 'Line', ref_index=ref_index),
+					'description': child_text(article, 'Description', ref_index=ref_index) or child_text(invoice, 'Description', ref_index=ref_index),
+					'invoice_number': invoice_number,
+					'shipment_no': shipment_no,
+					'line_item_identifier': child_text(article, 'LineItemIdentifier', ref_index=ref_index),
+					'country_of_origin': child_text(article, 'CountryOfOrigin', ref_index=ref_index),
+					'country_of_export': child_text(article, 'CountryOfExport', ref_index=ref_index),
+					'manufacturer_lds_id': child_text(article, 'Manufacturer_Id', ref_index=ref_index),
+					'related_party_indicator': child_text(article, 'RelatedPartyIndicator', ref_index=ref_index),
+					'gross_weight': to_float(child_text(article, 'GrossWeight', ref_index=ref_index)),
+					'entered_value': to_float(child_text(article, 'ArticleChargeUSD', ref_index=ref_index) or child_text(article, 'EnteredValue', ref_index=ref_index)),
+					'harbor_maintenance_fee': to_float(child_text(article, 'HarborMaintenanceFee', ref_index=ref_index)),
+					'merchandise_processing_fee': to_float(child_text(article, 'MerchandiseProcessingFee', ref_index=ref_index)),
+				})
+	return dedupe_article_rows(rows)
 
 def map_fees(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[str, Any]]:
 	rows = []
+	default_currency = child_text(root, 'Currency', ref_index=ref_index)
 	for fee in collection_children(root, 'StatementDailyEntries', 'StatementDailyEntry', ref_index=ref_index):
 		rows.append({
 			'fee_type': child_text(fee, 'Name', ref_index=ref_index) or child_text(fee, 'FeeType', ref_index=ref_index),
 			'amount': to_float(child_text(fee, 'TotalAmountDue', ref_index=ref_index) or child_text(fee, 'Amount', ref_index=ref_index)),
-			'currency': child_text(fee, 'Currency', ref_index=ref_index),
+			'currency': child_text(fee, 'Currency', ref_index=ref_index) or default_currency,
 			'description': child_text(fee, 'Description', ref_index=ref_index),
 		})
-	return dedupe_rows(rows, 'fee_type')
+
+	for shipment in collection_children(root, 'Shipments', 'Shipment', ref_index=ref_index):
+		shipment_no = child_text(shipment, 'ShipmentNo', ref_index=ref_index) or child_text(shipment, 'ShipmentNumber', ref_index=ref_index) or child_text(shipment, 'Number', ref_index=ref_index) or child_text(shipment, 'Id', ref_index=ref_index)
+		for invoice in collection_children(shipment, 'Invoices', 'ShipmentInvoice', ref_index=ref_index):
+			invoice_number = child_text(invoice, 'InvoiceNumber', ref_index=ref_index) or child_text(invoice, 'InvoiceNo', ref_index=ref_index) or child_text(invoice, 'Number', ref_index=ref_index) or child_text(invoice, 'Line', ref_index=ref_index) or child_text(invoice, 'Id', ref_index=ref_index)
+			invoice_currency = child_text(invoice, 'InvoiceValueCurrency', ref_index=ref_index) or child_text(invoice, 'Currency', ref_index=ref_index) or default_currency
+			for article in collection_children(invoice, 'Articles', 'ShipmentArticle', ref_index=ref_index):
+				article_line_no = child_text(article, 'Line', ref_index=ref_index)
+				for fee_type, field_name in (('HMF', 'HarborMaintenanceFee'), ('MPF', 'MerchandiseProcessingFee')):
+					amount = to_float(child_text(article, field_name, ref_index=ref_index))
+					if amount is None:
+						continue
+					rows.append({
+						'fee_type': fee_type,
+						'amount': amount,
+						'currency': invoice_currency,
+						'description': child_text(article, 'Description', ref_index=ref_index),
+						'shipment_no': shipment_no,
+						'invoice_number': invoice_number,
+						'article_line_no': article_line_no,
+					})
+	return dedupe_fee_rows(rows)
 
 
 def map_events(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[str, Any]]:
@@ -333,20 +384,28 @@ def map_events(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[
 
 def map_tariff_lines(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[str, Any]]:
 	rows = []
-	for article in descendants(root, 'ShipmentArticle', ref_index=ref_index):
-		article_country_of_origin = child_text(article, 'CountryOfOrigin', ref_index=ref_index)
-		for tariff in collection_children(article, 'Tariffs', 'ShipmentArticleTariff', ref_index=ref_index):
-			rows.append({
-				'line_no': child_text(tariff, 'Line', ref_index=ref_index),
-				'hs_code': first_nested_text(tariff, [('HarmonizedTariff', 'Code')], ref_index=ref_index),
-				'description': first_nested_text(tariff, [('HarmonizedTariff', 'Name')], ref_index=ref_index),
-				'quantity': to_float(child_text(tariff, 'Quantity1', ref_index=ref_index) or child_text(tariff, 'NumberOfReportingUnits', ref_index=ref_index) or child_text(tariff, 'Quantity', ref_index=ref_index) or first_nested_text(tariff, [('HarmonizedTariff', 'NumberOfReportingUnits')], ref_index=ref_index)),
-				'uom': child_text(tariff, 'UnitOfMeasure1', ref_index=ref_index) or first_nested_text(tariff, [('HarmonizedTariff', 'Unit1')], ref_index=ref_index),
-				'entered_value': to_float(child_text(tariff, 'TariffValue', ref_index=ref_index) or child_text(tariff, 'EnteredValue', ref_index=ref_index)),
-				'duty_amount': to_float(child_text(tariff, 'DutyAmount', ref_index=ref_index)),
-				'country_of_origin': article_country_of_origin or child_text(tariff, 'CountryOfOrigin', ref_index=ref_index) or first_nested_text(tariff, [('HarmonizedTariff', 'CountryOfOriginEditCode')], ref_index=ref_index),
-			})
-	return dedupe_rows(rows, 'line_no')
+	for shipment in collection_children(root, 'Shipments', 'Shipment', ref_index=ref_index):
+		shipment_no = child_text(shipment, 'ShipmentNo', ref_index=ref_index) or child_text(shipment, 'ShipmentNumber', ref_index=ref_index) or child_text(shipment, 'Number', ref_index=ref_index) or child_text(shipment, 'Id', ref_index=ref_index)
+		for invoice in collection_children(shipment, 'Invoices', 'ShipmentInvoice', ref_index=ref_index):
+			invoice_number = child_text(invoice, 'InvoiceNumber', ref_index=ref_index) or child_text(invoice, 'InvoiceNo', ref_index=ref_index) or child_text(invoice, 'Number', ref_index=ref_index) or child_text(invoice, 'Line', ref_index=ref_index) or child_text(invoice, 'Id', ref_index=ref_index)
+			for article in collection_children(invoice, 'Articles', 'ShipmentArticle', ref_index=ref_index):
+				article_line_no = child_text(article, 'Line', ref_index=ref_index)
+				article_country_of_origin = child_text(article, 'CountryOfOrigin', ref_index=ref_index)
+				for tariff in collection_children(article, 'Tariffs', 'ShipmentArticleTariff', ref_index=ref_index):
+					rows.append({
+						'line_no': child_text(tariff, 'Line', ref_index=ref_index),
+						'article_line_no': article_line_no,
+						'shipment_no': shipment_no,
+						'invoice_number': invoice_number,
+						'hs_code': first_nested_text(tariff, [('HarmonizedTariff', 'Code')], ref_index=ref_index),
+						'description': first_nested_text(tariff, [('HarmonizedTariff', 'Name')], ref_index=ref_index),
+						'quantity': to_float(child_text(tariff, 'Quantity1', ref_index=ref_index) or child_text(tariff, 'NumberOfReportingUnits', ref_index=ref_index) or child_text(tariff, 'Quantity', ref_index=ref_index) or first_nested_text(tariff, [('HarmonizedTariff', 'NumberOfReportingUnits')], ref_index=ref_index)),
+						'uom': child_text(tariff, 'UnitOfMeasure1', ref_index=ref_index) or first_nested_text(tariff, [('HarmonizedTariff', 'Unit1')], ref_index=ref_index),
+						'entered_value': to_float(child_text(tariff, 'TariffValue', ref_index=ref_index) or child_text(tariff, 'EnteredValue', ref_index=ref_index)),
+						'duty_amount': to_float(child_text(tariff, 'DutyAmount', ref_index=ref_index)),
+						'country_of_origin': article_country_of_origin or child_text(tariff, 'CountryOfOrigin', ref_index=ref_index) or first_nested_text(tariff, [('HarmonizedTariff', 'CountryOfOriginEditCode')], ref_index=ref_index),
+					})
+	return dedupe_tariff_rows(rows)
 
 
 def map_references(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[str, Any]]:
@@ -358,6 +417,66 @@ def map_references(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[d
 			'description': child_text(ref, 'Description', ref_index=ref_index),
 		})
 	return dedupe_rows(rows, 'reference_value')
+
+
+
+def dedupe_invoice_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	seen = set()
+	result = []
+	for row in rows:
+		marker = (row.get('shipment_no'), row.get('invoice_number'))
+		if marker in seen:
+			continue
+		seen.add(marker)
+		result.append(row)
+	return result
+
+
+def dedupe_article_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	seen = set()
+	result = []
+	for row in rows:
+		marker = (
+			row.get('shipment_no'),
+			row.get('invoice_number'),
+			row.get('article_line_no'),
+			row.get('line_item_identifier'),
+			row.get('description'),
+		)
+		if marker in seen:
+			continue
+		seen.add(marker)
+		result.append(row)
+	return result
+
+def dedupe_tariff_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	seen = set()
+	result = []
+	for row in rows:
+		marker = (row.get('shipment_no'), row.get('invoice_number'), row.get('article_line_no'), row.get('line_no'), row.get('hs_code'))
+		if marker in seen:
+			continue
+		seen.add(marker)
+		result.append(row)
+	return result
+
+
+def dedupe_fee_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	seen = set()
+	result = []
+	for row in rows:
+		marker = (
+			row.get('fee_type'),
+			row.get('shipment_no'),
+			row.get('invoice_number'),
+			row.get('article_line_no'),
+			row.get('amount'),
+		)
+		if marker in seen:
+			continue
+		seen.add(marker)
+		result.append(row)
+	return result
 
 
 def dedupe_rows(rows: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:

@@ -1,0 +1,42 @@
+{
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "actions": [],
+  "name": "Entry Article",
+  "module": "Customs Entries",
+  "editable_grid": 1,
+  "istable": 1,
+  "field_order": [
+    "article_line_no",
+    "description",
+    "invoice_number",
+    "shipment_no",
+    "line_item_identifier",
+    "country_of_origin",
+    "country_of_export",
+    "manufacturer_lds_id",
+    "related_party_indicator",
+    "gross_weight",
+    "entered_value",
+    "harbor_maintenance_fee",
+    "merchandise_processing_fee"
+  ],
+  "fields": [
+    {"fieldname": "article_line_no", "fieldtype": "Data", "label": "Article Line No", "in_list_view": 1},
+    {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+    {"fieldname": "invoice_number", "fieldtype": "Data", "label": "Invoice Number", "in_list_view": 1},
+    {"fieldname": "shipment_no", "fieldtype": "Data", "label": "Shipment No", "in_list_view": 1},
+    {"fieldname": "line_item_identifier", "fieldtype": "Data", "label": "Line Item Identifier"},
+    {"fieldname": "country_of_origin", "fieldtype": "Data", "label": "Country Of Origin"},
+    {"fieldname": "country_of_export", "fieldtype": "Data", "label": "Country Of Export"},
+    {"fieldname": "manufacturer_lds_id", "fieldtype": "Data", "label": "Manufacturer LDS Id"},
+    {"fieldname": "related_party_indicator", "fieldtype": "Data", "label": "Related Party Indicator"},
+    {"fieldname": "gross_weight", "fieldtype": "Float", "label": "Gross Weight"},
+    {"fieldname": "entered_value", "fieldtype": "Float", "label": "Entered Value", "precision": "2"},
+    {"fieldname": "harbor_maintenance_fee", "fieldtype": "Float", "label": "Harbor Maintenance Fee", "precision": "2"},
+    {"fieldname": "merchandise_processing_fee", "fieldtype": "Float", "label": "Merchandise Processing Fee", "precision": "2"}
+  ],
+  "permissions": []
+}

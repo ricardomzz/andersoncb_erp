@@ -52,6 +52,7 @@
     "shipments",
     "commercial_section",
     "invoices",
+    "articles",
     "fees",
     "classification_section",
     "tariff_lines",
@@ -403,6 +404,12 @@
       "fieldtype": "Table",
       "label": "Invoices",
       "options": "Entry Invoice"
+    },
+    {
+      "fieldname": "articles",
+      "fieldtype": "Table",
+      "label": "Articles",
+      "options": "Entry Article"
     },
     {
       "fieldname": "fees",

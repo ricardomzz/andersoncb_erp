@@ -10,6 +10,7 @@
   "istable": 1,
   "field_order": [
     "invoice_number",
+    "shipment_no",
     "invoice_date",
     "currency",
     "invoice_amount",
@@ -21,6 +22,11 @@
       "fieldtype": "Data",
       "label": "Invoice Number",
       "in_list_view": 1
+    },
+    {
+      "fieldname": "shipment_no",
+      "fieldtype": "Data",
+      "label": "Shipment No"
     },
     {
       "fieldname": "invoice_date",

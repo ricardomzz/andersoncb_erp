@@ -68,3 +68,24 @@ def test_importer_matching_does_not_merge_by_irs_number_alone(monkeypatch):
 
     assert result is None
     assert ('Importer Profile', {'display_name': 'Demo Company 2'}) in exists_calls
+
+
+def test_resolve_master_links_can_create_importer_profiles_from_entry_payload(monkeypatch):
+    mapped = {
+        "importer_profile_data": {"display_name": "Skillful International", "importer_code": "SKIIN0", "lds_id": "441"},
+        "importer_name": None,
+        "importer_number": None,
+        "shipments": [],
+    }
+
+    monkeypatch.setattr(
+        master_data,
+        "upsert_importer_profile",
+        lambda data, synced_on=None: SimpleNamespace(name="IMP-SKILLFUL", display_name="Skillful International", importer_code="SKIIN0", cbp_number=None, irs_number=None),
+    )
+
+    result = master_data.resolve_master_links(mapped, synced_on="2026-06-05 12:00:00", create_missing=True)
+
+    assert result["importer_profile"] == "IMP-SKILLFUL"
+    assert result["importer_name"] == "Skillful International"
+    assert result["importer_number"] == "SKIIN0"
