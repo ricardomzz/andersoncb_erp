@@ -10,54 +10,75 @@
   "search_fields": "entry_number,filer_code,client_ref,importer_name",
   "track_changes": 1,
   "field_order": [
-    "filer_code",
+    "header_section",
     "entry_number",
+    "filer_code",
     "status",
     "liquidation_status",
+    "header_dates_column",
     "entry_date",
-    "client_ref",
-    "importer_profile",
-    "importer_name",
-    "created_by",
-    "lds_id",
-    "last_lds_submission_on",
-    "lds_submission_errors",
-    "lds_last_submission_payload",
-    "source_active",
-    "archived_on",
-    "last_seen_in_source_on",
-    "last_synced_on",
-    "entry_section",
     "filing_date",
     "release_date",
     "liquidation_date",
-    "entry_type",
-    "port_of_entry",
-    "transport_mode",
-    "party_section",
+    "header_party_column",
+    "client_ref",
+    "importer_profile",
+    "importer_name",
+    "header_value_column",
+    "total_entered_value",
+    "currency",
+    "created_by",
+    "overview_section",
+    "overview_html",
+    "parties_section",
+    "parties_html",
     "importer_number",
     "consignee_name",
-    "reference_section",
     "broker_reference",
     "bond_number",
     "house_bill",
     "master_bill",
-    "total_entered_value",
-    "currency",
+    "shipment_section",
+    "shipment_summary_html",
+    "entry_type",
+    "port_of_entry",
+    "transport_mode",
+    "commercial_section",
+    "commercial_summary_html",
+    "classification_section",
+    "classification_summary_html",
+    "timeline_section",
+    "timeline_summary_html",
+    "system_section",
+    "system_summary_html",
+    "lds_id",
+    "last_lds_submission_on",
+    "lds_submission_errors",
+    "source_active",
+    "archived_on",
+    "last_seen_in_source_on",
+    "last_synced_on",
+    "lds_last_submission_payload",
+    "raw_payload_xml",
+    "raw_tables_section",
+    "raw_shipments_section",
     "shipments",
+    "raw_invoices_section",
     "invoices",
+    "raw_fees_section",
     "fees",
-    "events",
+    "raw_tariffs_section",
     "tariff_lines",
-    "references",
-    "raw_payload_xml"
+    "raw_events_section",
+    "events",
+    "raw_references_section",
+    "references"
   ],
   "fields": [
     {
-      "fieldname": "filer_code",
-      "fieldtype": "Data",
-      "label": "Filer Code",
-      "in_list_view": 1
+      "fieldname": "header_section",
+      "fieldtype": "Section Break",
+      "label": "Header Summary"
     },
     {
       "fieldname": "entry_number",
@@ -65,6 +86,12 @@
       "label": "Entry Number",
       "reqd": 0,
       "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "filer_code",
+      "fieldtype": "Data",
+      "label": "Filer Code",
       "in_list_view": 1
     },
     {
@@ -82,10 +109,35 @@
       "in_list_view": 1
     },
     {
+      "fieldname": "header_dates_column",
+      "fieldtype": "Column Break"
+    },
+    {
       "fieldname": "entry_date",
       "fieldtype": "Date",
       "label": "Entry Date",
       "in_list_view": 1
+    },
+    {
+      "fieldname": "filing_date",
+      "fieldtype": "Date",
+      "label": "Filing Date"
+    },
+    {
+      "fieldname": "release_date",
+      "fieldtype": "Date",
+      "label": "Release Date",
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "liquidation_date",
+      "fieldtype": "Date",
+      "label": "Liquidation Date",
+      "read_only": 1
+    },
+    {
+      "fieldname": "header_party_column",
+      "fieldtype": "Column Break"
     },
     {
       "fieldname": "client_ref",
@@ -108,11 +160,146 @@
       "read_only": 1
     },
     {
+      "fieldname": "header_value_column",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "total_entered_value",
+      "fieldtype": "Float",
+      "label": "Total Entered Value",
+      "precision": "2"
+    },
+    {
+      "fieldname": "currency",
+      "fieldtype": "Data",
+      "label": "Currency"
+    },
+    {
       "fieldname": "created_by",
       "fieldtype": "Data",
       "label": "Created By",
       "read_only": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "overview_section",
+      "fieldtype": "Section Break",
+      "label": "Overview"
+    },
+    {
+      "fieldname": "overview_html",
+      "fieldtype": "HTML",
+      "label": "Overview Summary"
+    },
+    {
+      "fieldname": "parties_section",
+      "fieldtype": "Section Break",
+      "label": "Parties & References"
+    },
+    {
+      "fieldname": "parties_html",
+      "fieldtype": "HTML",
+      "label": "Parties Summary"
+    },
+    {
+      "fieldname": "importer_number",
+      "fieldtype": "Data",
+      "label": "Importer Number",
+      "read_only": 1
+    },
+    {
+      "fieldname": "consignee_name",
+      "fieldtype": "Data",
+      "label": "Consignee Name"
+    },
+    {
+      "fieldname": "broker_reference",
+      "fieldtype": "Data",
+      "label": "Broker Reference"
+    },
+    {
+      "fieldname": "bond_number",
+      "fieldtype": "Data",
+      "label": "Bond Number"
+    },
+    {
+      "fieldname": "house_bill",
+      "fieldtype": "Data",
+      "label": "House Bill"
+    },
+    {
+      "fieldname": "master_bill",
+      "fieldtype": "Data",
+      "label": "Master Bill"
+    },
+    {
+      "fieldname": "shipment_section",
+      "fieldtype": "Section Break",
+      "label": "Shipment & Logistics"
+    },
+    {
+      "fieldname": "shipment_summary_html",
+      "fieldtype": "HTML",
+      "label": "Shipment Summary"
+    },
+    {
+      "fieldname": "entry_type",
+      "fieldtype": "Data",
+      "label": "Entry Type",
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "port_of_entry",
+      "fieldtype": "Data",
+      "label": "Port Of Entry",
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "transport_mode",
+      "fieldtype": "Data",
+      "label": "Transport Mode"
+    },
+    {
+      "fieldname": "commercial_section",
+      "fieldtype": "Section Break",
+      "label": "Commercial"
+    },
+    {
+      "fieldname": "commercial_summary_html",
+      "fieldtype": "HTML",
+      "label": "Commercial Summary"
+    },
+    {
+      "fieldname": "classification_section",
+      "fieldtype": "Section Break",
+      "label": "Classification"
+    },
+    {
+      "fieldname": "classification_summary_html",
+      "fieldtype": "HTML",
+      "label": "Classification Summary"
+    },
+    {
+      "fieldname": "timeline_section",
+      "fieldtype": "Section Break",
+      "label": "Timeline"
+    },
+    {
+      "fieldname": "timeline_summary_html",
+      "fieldtype": "HTML",
+      "label": "Timeline Summary"
+    },
+    {
+      "fieldname": "system_section",
+      "fieldtype": "Section Break",
+      "label": "System / LDS",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "system_summary_html",
+      "fieldtype": "HTML",
+      "label": "System Summary"
     },
     {
       "fieldname": "lds_id",
@@ -131,14 +318,6 @@
       "fieldname": "lds_submission_errors",
       "fieldtype": "Small Text",
       "label": "LDS Submission Errors",
-      "read_only": 1
-    },
-    {
-      "fieldname": "lds_last_submission_payload",
-      "fieldtype": "Code",
-      "label": "Last LDS Submission Payload",
-      "options": "XML",
-      "hidden": 1,
       "read_only": 1
     },
     {
@@ -169,131 +348,12 @@
       "read_only": 1
     },
     {
-      "fieldname": "entry_section",
-      "fieldtype": "Section Break",
-      "label": "Entry Details"
-    },
-    {
-      "fieldname": "filing_date",
-      "fieldtype": "Date",
-      "label": "Filing Date"
-    },
-    {
-      "fieldname": "release_date",
-      "fieldtype": "Date",
-      "label": "Release Date",
-      "in_list_view": 0
-    },
-    {
-      "fieldname": "liquidation_date",
-      "fieldtype": "Date",
-      "label": "Liquidation Date",
+      "fieldname": "lds_last_submission_payload",
+      "fieldtype": "Code",
+      "label": "Last LDS Submission Payload",
+      "options": "XML",
+      "hidden": 1,
       "read_only": 1
-    },
-    {
-      "fieldname": "entry_type",
-      "fieldtype": "Data",
-      "label": "Entry Type",
-      "in_list_view": 0
-    },
-    {
-      "fieldname": "port_of_entry",
-      "fieldtype": "Data",
-      "label": "Port Of Entry",
-      "in_list_view": 0
-    },
-    {
-      "fieldname": "transport_mode",
-      "fieldtype": "Data",
-      "label": "Transport Mode"
-    },
-    {
-      "fieldname": "party_section",
-      "fieldtype": "Section Break",
-      "label": "Parties"
-    },
-    {
-      "fieldname": "importer_number",
-      "fieldtype": "Data",
-      "label": "Importer Number",
-      "read_only": 1
-    },
-    {
-      "fieldname": "consignee_name",
-      "fieldtype": "Data",
-      "label": "Consignee Name"
-    },
-    {
-      "fieldname": "reference_section",
-      "fieldtype": "Section Break",
-      "label": "References"
-    },
-    {
-      "fieldname": "broker_reference",
-      "fieldtype": "Data",
-      "label": "Broker Reference"
-    },
-    {
-      "fieldname": "bond_number",
-      "fieldtype": "Data",
-      "label": "Bond Number"
-    },
-    {
-      "fieldname": "house_bill",
-      "fieldtype": "Data",
-      "label": "House Bill"
-    },
-    {
-      "fieldname": "master_bill",
-      "fieldtype": "Data",
-      "label": "Master Bill"
-    },
-    {
-      "fieldname": "total_entered_value",
-      "fieldtype": "Float",
-      "label": "Total Entered Value",
-      "precision": "2"
-    },
-    {
-      "fieldname": "currency",
-      "fieldtype": "Data",
-      "label": "Currency"
-    },
-    {
-      "fieldname": "shipments",
-      "fieldtype": "Table",
-      "label": "Shipments",
-      "options": "Entry Shipment"
-    },
-    {
-      "fieldname": "invoices",
-      "fieldtype": "Table",
-      "label": "Invoices",
-      "options": "Entry Invoice"
-    },
-    {
-      "fieldname": "fees",
-      "fieldtype": "Table",
-      "label": "Fees",
-      "options": "Entry Fee"
-    },
-    {
-      "fieldname": "events",
-      "fieldtype": "Table",
-      "label": "Events",
-      "options": "Entry Event"
-    },
-    {
-      "fieldname": "tariff_lines",
-      "fieldtype": "Table",
-      "label": "Tariff Lines",
-      "options": "Entry Tariff Line"
-    },
-    {
-      "fieldname": "references",
-      "fieldtype": "Table",
-      "label": "References",
-      "options": "Entry Reference"
     },
     {
       "fieldname": "raw_payload_xml",
@@ -302,6 +362,91 @@
       "options": "XML",
       "hidden": 1,
       "read_only": 1
+    },
+    {
+      "fieldname": "raw_tables_section",
+      "fieldtype": "Section Break",
+      "label": "Raw Tables",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "raw_shipments_section",
+      "fieldtype": "Section Break",
+      "label": "Raw Shipments",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "shipments",
+      "fieldtype": "Table",
+      "label": "Shipments",
+      "options": "Entry Shipment"
+    },
+    {
+      "fieldname": "raw_invoices_section",
+      "fieldtype": "Section Break",
+      "label": "Raw Invoices",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "invoices",
+      "fieldtype": "Table",
+      "label": "Invoices",
+      "options": "Entry Invoice"
+    },
+    {
+      "fieldname": "raw_fees_section",
+      "fieldtype": "Section Break",
+      "label": "Raw Fees",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "fees",
+      "fieldtype": "Table",
+      "label": "Fees",
+      "options": "Entry Fee"
+    },
+    {
+      "fieldname": "raw_tariffs_section",
+      "fieldtype": "Section Break",
+      "label": "Raw Tariff Lines",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "tariff_lines",
+      "fieldtype": "Table",
+      "label": "Tariff Lines",
+      "options": "Entry Tariff Line"
+    },
+    {
+      "fieldname": "raw_events_section",
+      "fieldtype": "Section Break",
+      "label": "Raw Events",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "events",
+      "fieldtype": "Table",
+      "label": "Events",
+      "options": "Entry Event"
+    },
+    {
+      "fieldname": "raw_references_section",
+      "fieldtype": "Section Break",
+      "label": "Raw References",
+      "collapsible": 1,
+      "collapsed": 1
+    },
+    {
+      "fieldname": "references",
+      "fieldtype": "Table",
+      "label": "References",
+      "options": "Entry Reference"
     }
   ],
   "permissions": [

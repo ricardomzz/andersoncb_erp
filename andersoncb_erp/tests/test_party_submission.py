@@ -132,6 +132,7 @@ def test_process_carrier_submission_surfaces_errors(monkeypatch):
 
     monkeypatch.setattr(party_submission, 'get_party_client', lambda: FakeClient())
     monkeypatch.setattr(party_submission, 'now_datetime', lambda: '2026-06-04 15:00:00')
+    monkeypatch.setattr(party_submission, '_', lambda message: message)
 
     with pytest.raises(Exception) as exc:
         process_carrier_submission(doc)

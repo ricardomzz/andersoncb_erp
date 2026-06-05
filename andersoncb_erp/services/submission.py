@@ -33,6 +33,201 @@ ET.register_namespace("z", SERIALIZATION_NS)
 CHILD_TABLE_FIELDS = ("shipments", "invoices", "fees", "events", "tariff_lines", "references")
 DRAFT_ENTRY_NUMBER_RE = re.compile(r"^TMP[A-Z0-9]{5}$")
 
+ENTRY_FIELD_ORDER = (
+	"EntityGuid",
+	"Id",
+	"RowVersion",
+	"Creator",
+	"Creator_Id",
+	"Date",
+	"InProcess",
+	"IsMarkedForDelete",
+	"IsNotActual",
+	"Number",
+	"ResponsiblePerson",
+	"ResponsiblePerson_Id",
+	"UserRemark",
+	"UserRemarkType",
+	"AdditionalSTBBondAmount",
+	"AdditionalSTBBondNumber",
+	"AdditionalSTBSuretyCode",
+	"BondAmount",
+	"BondNumber",
+	"BondType",
+	"BondWaiverReasonCode",
+	"BondedWarehouse",
+	"BondedWarehouse_Id",
+	"BrokerImporterFileNumber",
+	"BrokerOrOtherAgencyInfo",
+	"BrokerReferenceNumber",
+	"CBPTeamNumber",
+	"CancellationRequestReasonCode",
+	"CargoReleaseCancellationEstimatedEntryValue",
+	"Carrier",
+	"Carrier_Id",
+	"ClientRef",
+	"ConsolidatedReleaseEntries",
+	"ConveyanceName",
+	"CustomerInvoiceItems",
+	"DateOfArrival",
+	"DateOfImport",
+	"DateOfRelease",
+	"DeferredTaxPayment",
+	"DesignatedNotifyParty4811",
+	"DesignatedNotifyParty4811_Id",
+	"DutiableMailFee",
+	"ElectedExamSite",
+	"ElectedExamSite_Id",
+	"EntryFilerCode",
+	"EntryNumber",
+	"EntryType",
+	"EstimatedEntryDate",
+	"FinalWarehouseWithdrawalIndicator",
+	"ForeignTradeZone",
+	"ForeignTradeZone_Id",
+	"GeneralOrderNumber",
+	"Importer",
+	"Importer_Id",
+	"LastStatuses",
+	"LiquidationDate",
+	"LiquidationReasonsOrSuspensions",
+	"LiveEntryIndicator",
+	"Location",
+	"Location_Id",
+	"ManualEntrySurcharge",
+	"MissingDocumentCode1",
+	"MissingDocumentCode2",
+	"NonAMS",
+	"OriginatingWarehouseEntryFilerCode",
+	"OriginatingWarehouseEntryNumber",
+	"PGADataIncluded",
+	"PaymentType",
+	"PortOfEntry",
+	"PortOfEntry_Id",
+	"PortOfUnlading",
+	"PortOfUnlading_Id",
+	"PostSummaryCorrection",
+	"PostSummaryCorrectionAcceleratedLiquidation",
+	"PostSummaryCorrectionFilingExplanationText",
+	"PostSummaryCorrectionHeaderReasonCode1",
+	"PostSummaryCorrectionHeaderReasonCode2",
+	"PostSummaryCorrectionHeaderReasonCode3",
+	"PostSummaryCorrectionHeaderReasonCode4",
+	"PostSummaryCorrectionHeaderReasonCode5",
+	"PreliminaryStatementMonthDate",
+	"PreliminaryStatementPrintDate",
+	"ReconciliationIssueCode",
+	"ReplacementNumber",
+	"SelfCertification",
+	"ShipmentUsageTypeCode",
+	"Shipments",
+	"SplitShipmentReleaseElection",
+	"StatementDailyEntries",
+	"SuretyCode",
+	"Tag",
+	"TradeAgreementReconciliationIndicator",
+	"TransportationMode",
+	"TripIdentifier",
+	"UsStateOfDestination",
+)
+SHIPMENT_FIELD_ORDER = (
+	"EntityGuid",
+	"Id",
+	"RowVersion",
+	"Creator",
+	"Creator_Id",
+	"Date",
+	"InProcess",
+	"IsMarkedForDelete",
+	"IsNotActual",
+	"Number",
+	"ResponsiblePerson",
+	"ResponsiblePerson_Id",
+	"UserRemark",
+	"UserRemarkType",
+	"Agent",
+	"Agent_Id",
+	"BookingConsolidationNumber",
+	"BookingGrossWeightKg",
+	"BookingLoads",
+	"BookingNumber",
+	"BookingVolumeM",
+	"BookingVolumetricWeightKg",
+	"BreakBulk",
+	"BreakBulk_Id",
+	"Buyer",
+	"Buyer_Id",
+	"Carrier",
+	"Carrier_Id",
+	"Charges",
+	"ClientRef",
+	"Consignee",
+	"Consignee_Id",
+	"Consolidator",
+	"Consolidator_Id",
+	"CustomsEntry",
+	"CustomsEntry_Id",
+	"DateOfArrival",
+	"DateOfCargoReady",
+	"DateOfExport",
+	"DateOfImport",
+	"Description",
+	"Direction",
+	"HouseBillIssuer",
+	"HouseBillIssuer_Id",
+	"HouseBillNumber",
+	"Importer",
+	"ImporterSecurityFiling",
+	"ImporterSecurityFiling_Id",
+	"Importer_Id",
+	"InBondDate",
+	"InBondForeignPort",
+	"InBondForeignPort_Id",
+	"InBondLocation",
+	"InBondLocation_Id",
+	"InBondNumber",
+	"InBondPort",
+	"InBondPort_Id",
+	"Incoterms",
+	"Invoices",
+	"IsRegularBill",
+	"IsSplit",
+	"JobBreakBulk",
+	"JobCustomsEntry",
+	"JobDeliveryOrder",
+	"JobISF",
+	"LastStatuses",
+	"Loads",
+	"MasterBillIssuer",
+	"MasterBillIssuer_Id",
+	"MasterBillNumber",
+	"Notify",
+	"Notify_Id",
+	"PreBooking",
+	"PurchaseOrders",
+	"Quantity",
+	"QuantityUnit",
+	"Seller",
+	"Seller_Id",
+	"ShipTo",
+	"ShipTo_Id",
+	"ShippingSchedule",
+	"ShippingSchedule_Id",
+	"StuffingLocation",
+	"StuffingLocation_Id",
+	"SubHouseBillNumber",
+	"Tag",
+	"TrackingVessel",
+	"TrackingVessel_Id",
+	"Tracking_ConveyanceName",
+	"Tracking_TimeOfImport",
+	"Tracking_TimeOfImportIsActual",
+	"Tracking_TimeOfUpdate",
+	"TransportationMode",
+)
+ENTRY_FIELD_RANK = {fieldname: index for index, fieldname in enumerate(ENTRY_FIELD_ORDER)}
+SHIPMENT_FIELD_RANK = {fieldname: index for index, fieldname in enumerate(SHIPMENT_FIELD_ORDER)}
+
 
 @dataclass
 class LocalValidationIssue:
@@ -107,32 +302,37 @@ def format_local_validation_issues(issues: list[LocalValidationIssue]) -> str:
 
 
 def build_submission_entity_xml(doc) -> str:
-	entity = ET.Element(
-		"entity",
-		{
-			f"{{{XSI_NS}}}type": "a:CustomsEntry",
-		},
-	)
+	template_root = _build_entry_submission_template_root(doc)
+	entity = ET.Element("entity")
 
-	template_root = _parse_template_root(getattr(doc, "raw_payload_xml", None))
-	if template_root is not None:
-		for attr_name, value in template_root.attrib.items():
-			entity.set(attr_name, value)
-		for child in list(template_root):
-			entity.append(deepcopy(child))
+	for attr_name, value in template_root.attrib.items():
+		if attr_name == "{http://www.w3.org/2001/XMLSchema-instance}type":
+			continue
+		entity.set(attr_name, value)
+	for child in list(template_root):
+		entity.append(deepcopy(child))
 
-	_set_text(entity, "EntryNumber", None if is_draft_placeholder_entry_number(doc.entry_number) else doc.entry_number, DOCUMENTS_NS)
+	entry_number = _determine_submission_entry_number(template_root, doc)
+	if entry_number:
+		_set_text(entity, "EntryNumber", entry_number, DOCUMENTS_NS)
+	broker_reference = _determine_submission_broker_reference(doc, entry_number)
 	_set_text(entity, "EntryFilerCode", doc.filer_code, DOCUMENTS_NS)
 	_set_text(entity, "EntryType", doc.entry_type, DOCUMENTS_NS)
-	_set_text(entity, "Date", _as_datetime_text(doc.entry_date), DOCUMENTS_NS)
+	_set_text(entity, "Date", _as_datetime_text(doc.entry_date), None)
 	_set_text(entity, "TransportationMode", doc.transport_mode, DOCUMENTS_NS)
-	_set_text(entity, "BrokerReferenceNumber", doc.broker_reference, DOCUMENTS_NS)
+	_set_text(entity, "BrokerReferenceNumber", broker_reference, DOCUMENTS_NS)
 	_set_text(entity, "SuretyCode", doc.bond_number, DOCUMENTS_NS)
 	_set_text(entity, "ClientRef", doc.client_ref, DOCUMENTS_NS)
+	_set_entry_arrival_fields(entity, doc.shipments or [])
 	_set_port_of_entry(entity, doc.port_of_entry)
+	_set_port_of_unlading(entity, doc.port_of_entry)
 	_set_importer_from_profile(entity, doc.importer_profile)
-	_set_consignee(entity, doc.consignee_name)
-	_set_shipments(entity, doc.shipments or [])
+	_set_entry_carrier(entity, doc.shipments or [])
+	if getattr(doc, 'lds_id', None):
+		_set_shipments(entity, doc.shipments or [], importer_profile_name=getattr(doc, 'importer_profile', None), house_bill=getattr(doc, 'house_bill', None))
+	else:
+		_remove_child(entity, 'Shipments')
+	_reorder_children(entity, ENTRY_FIELD_RANK)
 
 	return ET.tostring(entity, encoding="unicode")
 
@@ -149,8 +349,10 @@ def process_lds_submission(doc) -> None:
 	doc.last_lds_submission_on = now_datetime()
 	doc.lds_last_submission_payload = entity_xml
 
+	submitted_entry_number = _extract_submission_entry_number(entity_xml)
 	try:
 		saved_xml = get_client().save_entry_xml(entity_xml)
+		saved_xml = _hydrate_saved_entry_xml(saved_xml, submitted_entry_number, doc.filer_code)
 	except LDSValidationError as exc:
 		message = format_lds_validation_error(exc)
 		doc.status = "Draft"
@@ -235,23 +437,109 @@ def format_lds_validation_error(exc: LDSValidationError) -> str:
 	return "\n".join(lines)
 
 
+def _hydrate_saved_entry_xml(saved_xml: str, entry_number: str | None, filer_code: str | None) -> str:
+	try:
+		root = ET.fromstring(saved_xml)
+	except ET.ParseError:
+		return saved_xml
+	if _find_direct_child(root, 'EntryNumber') is not None or _find_direct_child(root, 'Id') is not None and root.attrib.get(f'{{{SERIALIZATION_NS}}}Ref') is None:
+		return saved_xml
+	if not entry_number:
+		return saved_xml
+	try:
+		return get_client().fetch_entry_detail_xml(entry_number, filer_code)
+	except LDSClientError:
+		return saved_xml
+
+
+def _extract_submission_entry_number(entity_xml: str) -> str | None:
+	try:
+		root = ET.fromstring(entity_xml)
+	except ET.ParseError:
+		return None
+	node = _find_child(root, 'EntryNumber')
+	if node is None or not node.text:
+		return None
+	return node.text.strip()
+
+
+def _build_entry_submission_template_root(doc) -> ET.Element:
+	return _parse_new_entry_template_root()
+
+
+def _determine_submission_entry_number(template_root: ET.Element, doc) -> str | None:
+	if getattr(doc, 'lds_id', None):
+		return getattr(doc, 'entry_number', None)
+	template_number = _extract_template_number(template_root)
+	if template_number and getattr(doc, 'filer_code', None):
+		return get_client().calculate_entry_number(template_number, doc.filer_code, check_unique=True, adjust_sequence=False)
+	entry_number = getattr(doc, 'entry_number', None)
+	if entry_number and not is_draft_placeholder_entry_number(entry_number):
+		return entry_number
+	return None
+
+
+def _determine_submission_broker_reference(doc, entry_number: str | None) -> str | None:
+	if getattr(doc, 'lds_id', None):
+		return getattr(doc, 'broker_reference', None)
+	if entry_number:
+		return entry_number
+	return getattr(doc, 'broker_reference', None)
+
+
+def _extract_template_number(template_root: ET.Element) -> str | None:
+	node = _find_direct_child(template_root, 'Number')
+	if node is None or not node.text:
+		return None
+	return node.text.strip()
+
+
+@frappe.whitelist()
+def get_new_entry_template_xml() -> str:
+	return get_client().new_entry_xml()
+
+
+def _parse_new_entry_template_root() -> ET.Element:
+	return _strip_serialization_attributes(ET.fromstring(get_client().new_entry_xml()))
+
+
+def _build_new_shipment_template_root() -> ET.Element:
+	client = get_client()
+	if not hasattr(client, 'new_shipment_xml'):
+		return ET.Element(f'{{{DOCUMENTS_NS}}}Shipment')
+	root = ET.fromstring(client.new_shipment_xml())
+	root.tag = f'{{{DOCUMENTS_NS}}}Shipment'
+	return _strip_serialization_attributes(root)
+
+
+def _strip_serialization_attributes(element: ET.Element) -> ET.Element:
+	for node in element.iter():
+		for attr_name in list(node.attrib):
+			if attr_name.startswith(f'{{{SERIALIZATION_NS}}}'):
+				del node.attrib[attr_name]
+	return element
+
+
 def _parse_template_root(raw_payload_xml: str | None) -> ET.Element | None:
 	if not raw_payload_xml:
 		return None
 	try:
-		return ET.fromstring(raw_payload_xml)
+		return _strip_serialization_attributes(ET.fromstring(raw_payload_xml))
 	except ET.ParseError:
 		return None
 
 
-def _set_text(parent: ET.Element, local_name: str, value: Any, namespace: str) -> None:
+def _set_text(parent: ET.Element, local_name: str, value: Any, namespace: str | None) -> None:
 	element = _find_child(parent, local_name)
 	if value in (None, ""):
 		if element is not None:
 			parent.remove(element)
 		return
 	if element is None:
-		element = ET.SubElement(parent, f"{{{namespace}}}{local_name}")
+		if namespace:
+			element = ET.SubElement(parent, f"{{{namespace}}}{local_name}")
+		else:
+			element = ET.SubElement(parent, local_name)
 	element.text = str(value)
 
 
@@ -262,16 +550,38 @@ def _replace_child(parent: ET.Element, local_name: str, replacement: ET.Element)
 	parent.append(replacement)
 
 
+def _remove_child(parent: ET.Element, local_name: str) -> None:
+	existing = _find_child(parent, local_name)
+	if existing is not None:
+		parent.remove(existing)
+
+
+def _set_entry_arrival_fields(parent: ET.Element, shipments) -> None:
+	arrival = None
+	for row in shipments:
+		arrival = _as_datetime_text(getattr(row, 'arrival_date', None))
+		if arrival:
+			break
+	_set_text(parent, 'DateOfArrival', arrival, DOCUMENTS_NS)
+	_set_text(parent, 'DateOfImport', arrival, DOCUMENTS_NS)
+	_set_text(parent, 'EstimatedEntryDate', arrival, DOCUMENTS_NS)
+
+
+
+def _set_port_of_unlading(parent: ET.Element, port_code: str | None) -> None:
+	port = _find_child(parent, 'PortOfUnlading')
+	if port is not None:
+		parent.remove(port)
+	port_id = _resolve_port_id(port_code)
+	_set_text(parent, 'PortOfUnlading_Id', port_id, DOCUMENTS_NS)
+
+
 def _set_port_of_entry(parent: ET.Element, port_code: str | None) -> None:
-	if not port_code:
-		return
-	port = _find_child(parent, "PortOfEntry")
-	if port is None:
-		port = ET.SubElement(parent, f"{{{DOCUMENTS_NS}}}PortOfEntry")
-	code = _find_direct_child(port, "Code")
-	if code is None:
-		code = ET.SubElement(port, "Code")
-	code.text = port_code
+	port = _find_child(parent, 'PortOfEntry')
+	if port is not None:
+		parent.remove(port)
+	port_id = _resolve_port_id(port_code)
+	_set_text(parent, 'PortOfEntry_Id', port_id, DOCUMENTS_NS)
 
 
 def _set_importer_from_profile(parent: ET.Element, importer_profile_name: str | None) -> None:
@@ -287,58 +597,78 @@ def _set_importer_from_profile(parent: ET.Element, importer_profile_name: str | 
 	)
 	if importer is not None:
 		_replace_child(parent, 'Importer', importer)
+	_set_text(parent, 'Importer_Id', getattr(profile, 'lds_id', None), DOCUMENTS_NS)
 
 
-def _set_shipments(parent: ET.Element, shipments) -> None:
+def _set_shipments(parent: ET.Element, shipments, importer_profile_name: str | None = None, house_bill: str | None = None) -> None:
 	container = _find_child(parent, 'Shipments')
+	existing_shipments = []
+	if container is not None:
+		existing_shipments = [child for child in list(container) if child.tag.split('}', 1)[-1] == 'Shipment']
+
+	if container is not None and existing_shipments and len(existing_shipments) == len(shipments):
+		for shipment, row in zip(existing_shipments, shipments):
+			_apply_shipment_row(shipment, row, importer_profile_name, house_bill=house_bill)
+		return
+
 	if container is not None:
 		parent.remove(container)
 	container = ET.SubElement(parent, f'{{{DOCUMENTS_NS}}}Shipments')
 	for row in shipments:
-		shipment = ET.SubElement(container, f'{{{DOCUMENTS_NS}}}Shipment')
-		_set_text(shipment, 'Number', getattr(row, 'shipment_no', None), DOCUMENTS_NS)
-		_set_text(shipment, 'TransportationMode', getattr(row, 'mode', None), DOCUMENTS_NS)
-		_set_text(shipment, 'DateOfImport', _as_datetime_text(getattr(row, 'arrival_date', None)), DOCUMENTS_NS)
-		_set_port_of_entry_on_shipment(shipment, getattr(row, 'destination', None))
-		_set_carrier_on_shipment(shipment, getattr(row, 'carrier_profile', None))
+		shipment = _build_new_shipment_template_root()
+		container.append(shipment)
+		_apply_shipment_row(shipment, row, importer_profile_name, house_bill=house_bill)
 
 
-def _set_port_of_entry_on_shipment(shipment: ET.Element, port_code: str | None) -> None:
-	if not port_code:
-		return
-	port = ET.SubElement(shipment, f'{{{DOCUMENTS_NS}}}PortOfEntry')
-	code = ET.SubElement(port, 'Code')
-	code.text = port_code
+def _apply_shipment_row(shipment: ET.Element, row, importer_profile_name: str | None = None, house_bill: str | None = None) -> None:
+	_set_text(shipment, 'Number', getattr(row, 'shipment_no', None), DOCUMENTS_NS)
+	_set_text(shipment, 'TransportationMode', getattr(row, 'mode', None), DOCUMENTS_NS)
+	arrival = _as_datetime_text(getattr(row, 'arrival_date', None))
+	_set_text(shipment, 'DateOfImport', arrival, DOCUMENTS_NS)
+	_set_text(shipment, 'DateOfArrival', arrival, DOCUMENTS_NS)
+	_set_text(shipment, 'Direction', 'IM', DOCUMENTS_NS)
+	_set_text(shipment, 'HouseBillNumber', house_bill, DOCUMENTS_NS)
+	if importer_profile_name:
+		profile = frappe.get_cached_doc('Importer Profile', importer_profile_name)
+		importer_id = getattr(profile, 'lds_id', None)
+		_set_text(shipment, 'Importer_Id', importer_id, DOCUMENTS_NS)
+		_set_text(shipment, 'Buyer_Id', importer_id, DOCUMENTS_NS)
+		_set_text(shipment, 'Consignee_Id', importer_id, DOCUMENTS_NS)
+		_set_text(shipment, 'ShipTo_Id', importer_id, DOCUMENTS_NS)
+		_set_text(shipment, 'Seller_Id', importer_id, DOCUMENTS_NS)
+		_set_text(shipment, 'Consolidator_Id', importer_id, DOCUMENTS_NS)
+		_set_text(shipment, 'StuffingLocation_Id', importer_id, DOCUMENTS_NS)
+	_set_carrier_on_shipment(shipment, getattr(row, 'carrier_profile', None))
+	if house_bill and getattr(row, 'carrier_profile', None):
+		carrier = frappe.get_cached_doc('Carrier', row.carrier_profile)
+		_set_text(shipment, 'HouseBillIssuer_Id', getattr(carrier, 'lds_id', None), DOCUMENTS_NS)
+	_reorder_children(shipment, SHIPMENT_FIELD_RANK)
 
 
 def _set_carrier_on_shipment(shipment: ET.Element, carrier_profile_name: str | None) -> None:
+	existing_carrier = _find_child(shipment, 'Carrier')
+	if existing_carrier is not None:
+		shipment.remove(existing_carrier)
 	if not carrier_profile_name:
 		return
 	carrier = frappe.get_cached_doc('Carrier', carrier_profile_name)
-	if carrier.lds_id:
-		_set_text(shipment, 'Carrier_Id', carrier.lds_id, DOCUMENTS_NS)
-	carrier_node = _build_directory_entity(
-		local_name='Carrier',
-		raw_payload_xml=carrier.raw_payload_xml,
-		lds_id=carrier.lds_id,
-		code=carrier.carrier_code,
-		name=carrier.display_name,
-	)
-	if carrier_node is not None:
-		shipment.append(carrier_node)
+	_set_text(shipment, 'Carrier_Id', getattr(carrier, 'lds_id', None), DOCUMENTS_NS)
 
 
 def _build_directory_entity(local_name: str, raw_payload_xml: str | None, lds_id: str | None, code: str | None, name: str | None) -> ET.Element | None:
 	root = None
 	if raw_payload_xml:
 		try:
-			root = ET.fromstring(raw_payload_xml)
+			root = _strip_serialization_attributes(ET.fromstring(raw_payload_xml))
+			root = _unwrap_directory_entity_root(root)
 		except ET.ParseError:
 			root = None
 	if root is None:
 		if not any([lds_id, code, name]):
 			return None
 		root = ET.Element(f'{{{DOCUMENTS_NS}}}{local_name}')
+	else:
+		root.tag = f'{{{DOCUMENTS_NS}}}{local_name}'
 	if lds_id:
 		_set_text(root, 'Id', lds_id, DOCUMENTS_NS)
 	if code:
@@ -360,6 +690,54 @@ def _set_consignee(parent: ET.Element, consignee_name: str | None) -> None:
 	name.text = consignee_name
 
 
+def _set_entry_carrier(parent: ET.Element, shipments) -> None:
+	carrier_id = None
+	carrier_name = None
+	carrier_raw_payload = None
+	for row in shipments:
+		carrier_profile = getattr(row, 'carrier_profile', None)
+		if not carrier_profile:
+			continue
+		carrier = frappe.get_cached_doc('Carrier', carrier_profile)
+		carrier_id = getattr(carrier, 'lds_id', None)
+		carrier_name = getattr(carrier, 'display_name', None)
+		carrier_raw_payload = getattr(carrier, 'raw_payload_xml', None)
+		if carrier_id:
+			break
+	carrier = _build_directory_entity(
+		local_name='Carrier',
+		raw_payload_xml=carrier_raw_payload,
+		lds_id=carrier_id,
+		code=None,
+		name=carrier_name,
+	)
+	if carrier is not None:
+		_replace_child(parent, 'Carrier', carrier)
+	_set_text(parent, 'Carrier_Id', carrier_id, DOCUMENTS_NS)
+
+
+def _unwrap_directory_entity_root(root: ET.Element) -> ET.Element:
+	if _find_direct_child(root, 'Id') is not None or _find_direct_child(root, 'EntityGuid') is not None:
+		return root
+	children = list(root)
+	if len(children) == 1 and (_find_direct_child(children[0], 'Id') is not None or _find_direct_child(children[0], 'EntityGuid') is not None):
+		return children[0]
+	return root
+
+
+def _resolve_port_id(port_code: str | None) -> str | None:
+	if not port_code:
+		return None
+	client = get_client()
+	if not hasattr(client, 'fetch_customs_port_by_code_xml'):
+		return None
+	try:
+		root = _strip_serialization_attributes(ET.fromstring(client.fetch_customs_port_by_code_xml(port_code)))
+	except (LDSClientError, ET.ParseError):
+		return None
+	return _extract_id_from_directory_entity(root)
+
+
 def _find_child(parent: ET.Element, local_name: str) -> ET.Element | None:
 	for child in list(parent):
 		if child.tag.split("}", 1)[-1] == local_name:
@@ -372,6 +750,19 @@ def _find_direct_child(parent: ET.Element, local_name: str) -> ET.Element | None
 		if child.tag.split("}", 1)[-1] == local_name:
 			return child
 	return None
+
+
+def _extract_id_from_directory_entity(root: ET.Element) -> str | None:
+	id_node = _find_direct_child(root, 'Id')
+	if id_node is None or not id_node.text:
+		return None
+	return id_node.text.strip()
+
+
+def _reorder_children(parent: ET.Element, rank: dict[str, int]) -> None:
+	children = list(parent)
+	children.sort(key=lambda child: rank.get(child.tag.split("}", 1)[-1], len(rank) + 100))
+	parent[:] = children
 
 
 def _as_datetime_text(value: Any) -> str | None:

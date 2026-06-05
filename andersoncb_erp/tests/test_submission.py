@@ -67,7 +67,7 @@ def fake_get_cached_doc(doctype, name):
     if doctype == 'Importer Profile':
         return SimpleNamespace(name=name, display_name='Importer Co', importer_code='IMP-1', cbp_number=None, irs_number=None, raw_payload_xml=None, lds_id='493', docstatus=1)
     if doctype == 'Carrier':
-        return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR-1', raw_payload_xml=None, lds_id='1488', docstatus=1)
+        return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR-1', raw_payload_xml='<Carrier><Id>1488</Id><Code>CAR-1</Code><Name>Carrier Co</Name></Carrier>', lds_id='1488', docstatus=1)
     raise AssertionError((doctype, name))
 
 
@@ -98,28 +98,85 @@ def test_validate_customs_entry_for_submission_enforces_entry_number_length(monk
 
 def test_build_submission_entity_xml_builds_importer_and_carrier_nodes(monkeypatch):
     monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+
+    class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/" z:Id="i1"><EntityGuid>guid-1</EntityGuid><Date>2026-06-04T17:37:45</Date><Number>3003990</Number><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber><a:EntryType xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">01</a:EntryType><a:Shipments xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents"></a:Shipments></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
+    monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     xml = build_submission_entity_xml(make_doc())
 
-    assert 'i:type="a:CustomsEntry"' in xml
+    assert 'i:type="a:CustomsEntry"' not in xml
+    assert '<entity' in xml
     assert 'EntryFilerCode' in xml
     assert 'Importer Co' in xml
     assert 'Carrier Co' in xml
     assert 'Carrier_Id' in xml
-    assert 'Shipment' in xml
+    assert '<entity' in xml
+    assert 'Shipment' not in xml
+    assert '<Date>2026-06-04T00:00:00</Date>' in xml
+
+
+def test_build_submission_entity_xml_sets_broker_reference_to_calculated_entry_number_for_new_entries(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+
+    class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult><Date>2026-06-04T17:37:45</Date><Number>3003990</Number><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
+    monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
+    xml = build_submission_entity_xml(make_doc(entry_number='TMPABC12', broker_reference='LOCAL-REF'))
+
+    assert 'BrokerReferenceNumber>30039903<' in xml
+    assert 'LOCAL-REF' not in xml
 
 
 def test_build_submission_entity_xml_omits_placeholder_entry_number(monkeypatch):
     monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+
+    class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult><Date>2026-06-04T17:37:45</Date><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
+    monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     xml = build_submission_entity_xml(make_doc(entry_number='TMPABC12'))
 
     assert 'TMPABC12' not in xml
     assert 'EntryFilerCode' in xml
+    assert '30039903' in xml
 
 
 def test_process_lds_submission_populates_mapped_fields(monkeypatch):
     doc = make_doc(entry_number='TMPAB123')
 
     class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult><Date>2026-06-04T17:37:45</Date><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
         def save_entry_xml(self, entity_xml):
             return '<CustomsEntry><Id>777</Id><EntryNumber>76543210</EntryNumber><EntryFilerCode>SY1</EntryFilerCode><EntryType>01</EntryType><Date>2026-06-04T00:00:00</Date><PortOfEntry><Code>2704</Code></PortOfEntry><Importer><Code>IMP-1</Code><Name>Importer Co</Name></Importer></CustomsEntry>'
 
@@ -156,12 +213,22 @@ def test_process_lds_submission_surfaces_lds_errors(monkeypatch):
     doc = make_doc(entry_number='TMPAB123')
 
     class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult><Date>2026-06-04T17:37:45</Date><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
         def save_entry_xml(self, entity_xml):
             raise LDSClientError('boom')
 
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     monkeypatch.setattr(submission, 'now_datetime', lambda: '2026-06-04 14:00:00')
+    monkeypatch.setattr(submission, '_', lambda message: message)
 
     with pytest.raises(Exception) as exc:
         process_lds_submission(doc)
@@ -170,6 +237,31 @@ def test_process_lds_submission_surfaces_lds_errors(monkeypatch):
     assert doc.status == 'Draft'
     assert doc.lds_submission_errors == 'LDS submission failed: boom'
 
+
+
+def test_build_submission_entity_xml_ignores_existing_entry_raw_payload(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+    doc = make_doc(raw_payload_xml='<a:CustomsEntry xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents"><Date xmlns="">2026-06-03T00:00:00</Date><a:EntryNumber>30010000</a:EntryNumber></a:CustomsEntry>')
+
+    class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult><Date>2026-06-04T17:37:45</Date><Number>3003990</Number><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
+    monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
+
+    xml = build_submission_entity_xml(doc)
+
+    assert '<entity' in xml
+    assert '30010000' not in xml
+    assert '12345678' not in xml
+    assert '30039903' in xml
+    assert '<ns0:PortOfEntry>' not in xml and '<PortOfEntry>' not in xml
 
 
 def test_validate_customs_entry_for_submission_requires_submitted_master_records(monkeypatch):
@@ -187,3 +279,28 @@ def test_validate_customs_entry_for_submission_requires_submitted_master_records
     messages = {issue.message for issue in issues}
     assert 'Importer Profile must be submitted to LDS before it can be used on a Customs Entry.' in messages
     assert 'Each shipment carrier must be submitted to LDS before it can be used on a Customs Entry.' in messages
+
+
+def test_build_submission_entity_xml_orders_entry_fields_for_lds_contract(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+
+    class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult><Date>2026-06-04T17:37:45</Date><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber><a:Shipments xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents"></a:Shipments></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
+        def new_shipment_xml(self):
+            return '<NewResult><Date>2026-06-04T17:37:45</Date><a:Invoices xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents" /></NewResult>'
+
+    monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
+    xml = build_submission_entity_xml(make_doc(entry_number='TMPABC12'))
+
+    assert xml.index('Carrier_Id') < xml.index('ClientRef') < xml.index('EntryType') < xml.index('Importer_Id') < xml.index('PortOfEntry_Id') < xml.index('SuretyCode') < xml.index('TransportationMode')
+    assert 'Consignee><Name>' not in xml
+
+

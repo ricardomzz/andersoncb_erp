@@ -135,6 +135,14 @@ class LDSClient:
             code=code,
         )
 
+    def fetch_customs_port_by_code_xml(self, code: str) -> str:
+        return self._fetch_directory_entity_by_code_xml(
+            manager_name='CustomsPortManager',
+            soap_action_interface_name='IEntityManagerDirectoryOf_CustomsPort',
+            entity_local_names=('CustomsPort', 'GetByCodeResult'),
+            code=code,
+        )
+
     def fetch_entry_detail_xml(self, entry_number: str, filer_code: str | None = None) -> str:
         filer_code = filer_code or self.filer_code
         if not filer_code:
@@ -172,6 +180,54 @@ class LDSClient:
             entity_local_names=('CustomsEntry', 'GetResult', 'GetByEntryNumberResult'),
             entity_xml=entity_xml,
         )
+
+    def new_entry_xml(self) -> str:
+        body = f'<New xmlns="{TEMPURI_NS}" />'
+        body_element = self._request_manager_xml(
+            'CustomsEntryManager',
+            'http://tempuri.org/IEntityManagerOf_CustomsEntry/New',
+            body,
+        )
+        entities = extract_named_elements(body_element, ('NewResult', 'CustomsEntry'))
+        if not entities:
+            raise LDSClientError('CustomsEntryManager/New did not return an entry template payload.')
+        return ET.tostring(entities[0], encoding='unicode')
+
+    def new_shipment_xml(self) -> str:
+        body = (
+            f'<New xmlns="{TEMPURI_NS}">'
+            '<sourceId i:nil="true" xmlns:i="http://www.w3.org/2001/XMLSchema-instance"/>'
+            '</New>'
+        )
+        body_element = self._request_manager_xml(
+            'ShipmentManager',
+            'http://tempuri.org/IEntityManagerOf_Shipment/New',
+            body,
+        )
+        entities = extract_named_elements(body_element, ('NewResult', 'Shipment'))
+        if not entities:
+            raise LDSClientError('ShipmentManager/New did not return a shipment template payload.')
+        return ET.tostring(entities[0], encoding='unicode')
+
+
+    def calculate_entry_number(self, number: str | int, filer_code: str, check_unique: bool = True, adjust_sequence: bool = False) -> str:
+        body = (
+            f'<CalculateEntryNumber xmlns="{TEMPURI_NS}">'
+            f'<number>{xml_escape(number)}</number>'
+            f'<filerCode>{xml_escape(filer_code)}</filerCode>'
+            f'<checkUnique>{str(bool(check_unique)).lower()}</checkUnique>'
+            f'<adjustSequence>{str(bool(adjust_sequence)).lower()}</adjustSequence>'
+            '</CalculateEntryNumber>'
+        )
+        body_element = self._request_manager_xml(
+            'CustomsEntryManager',
+            'http://tempuri.org/ICustomsEntryManager/CalculateEntryNumber',
+            body,
+        )
+        value = find_text(body_element, 'CalculateEntryNumberResult')
+        if not value:
+            raise LDSClientError('CustomsEntryManager/CalculateEntryNumber did not return an entry number.')
+        return value
 
     def save_contact_xml(self, entity_xml: str) -> str:
         return self._save_entity_xml(
