@@ -12,6 +12,10 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from andersoncb_erp.integrations.lds import LDSClientError, LDSValidationError, XSI_NS
+from andersoncb_erp.services.dotnet_serializer import (
+	DotNetSerializerUnavailable,
+	build_customs_entry_repair_xml,
+)
 from andersoncb_erp.services.mapping import parse_entry_xml
 from andersoncb_erp.services.master_data import resolve_master_links
 from andersoncb_erp.services.sync import (
@@ -32,6 +36,7 @@ ET.register_namespace("z", SERIALIZATION_NS)
 
 CHILD_TABLE_FIELDS = ("shipments", "invoices", "fees", "events", "tariff_lines", "references")
 DRAFT_ENTRY_NUMBER_RE = re.compile(r"^TMP[A-Z0-9]{5}$")
+FALLBACK_ENTRY_NUMBER_FLOOR = 3005004
 
 ENTRY_FIELD_ORDER = (
 	"EntityGuid",
@@ -265,6 +270,10 @@ def validate_customs_entry_for_submission(doc) -> list[LocalValidationIssue]:
 	if entry_number and not is_draft_placeholder_entry_number(entry_number) and len(entry_number) > 8:
 		issues.append(LocalValidationIssue("entry_number", "Entry Number must be 8 characters or fewer for LDS submission."))
 
+	broker_reference = (getattr(doc, "broker_reference", "") or "").strip()
+	if broker_reference and len(broker_reference) > 9:
+		issues.append(LocalValidationIssue("broker_reference", "Broker Reference must be 9 characters or fewer for LDS submission."))
+
 	if getattr(doc, 'importer_profile', None):
 		profile = frappe.get_cached_doc('Importer Profile', doc.importer_profile)
 		if profile.docstatus != 1 or not profile.lds_id:
@@ -303,16 +312,11 @@ def format_local_validation_issues(issues: list[LocalValidationIssue]) -> str:
 
 def build_submission_entity_xml(doc) -> str:
 	template_root = _build_entry_submission_template_root(doc)
-	entity = ET.Element("entity")
+	entity = _build_save_entity_from_root(template_root)
 
-	for attr_name, value in template_root.attrib.items():
-		if attr_name == "{http://www.w3.org/2001/XMLSchema-instance}type":
-			continue
-		entity.set(attr_name, value)
-	for child in list(template_root):
-		entity.append(deepcopy(child))
-
-	entry_number = _determine_submission_entry_number(template_root, doc)
+	internal_number, entry_number = _allocate_submission_numbers(template_root, doc)
+	if internal_number is not None:
+		_set_text(entity, "Number", internal_number, None)
 	if entry_number:
 		_set_text(entity, "EntryNumber", entry_number, DOCUMENTS_NS)
 	broker_reference = _determine_submission_broker_reference(doc, entry_number)
@@ -353,16 +357,21 @@ def process_lds_submission(doc) -> None:
 	try:
 		saved_xml = get_client().save_entry_xml(entity_xml)
 		saved_xml = _hydrate_saved_entry_xml(saved_xml, submitted_entry_number, doc.filer_code)
+		saved_xml = _repair_saved_entry_numbering_if_needed(doc, saved_xml)
 	except LDSValidationError as exc:
 		message = format_lds_validation_error(exc)
 		doc.status = "Draft"
 		doc.lds_submission_errors = message
 		raise frappe.ValidationError(message)
 	except LDSClientError as exc:
-		message = _("LDS submission failed: {0}").format(str(exc))
-		doc.status = "Draft"
-		doc.lds_submission_errors = message
-		raise frappe.ValidationError(message)
+		recovered_xml = _recover_from_zero_number_duplicate(doc, entity_xml, submitted_entry_number, exc)
+		if recovered_xml is not None:
+			saved_xml = recovered_xml
+		else:
+			message = _("LDS submission failed: {0}").format(str(exc))
+			doc.status = "Draft"
+			doc.lds_submission_errors = message
+			raise frappe.ValidationError(message)
 
 	mapped = resolve_master_links(parse_entry_xml(saved_xml), synced_on=now_datetime(), create_missing=False)
 	mapped["status"] = derive_entry_status(mapped, source_active=1)
@@ -424,7 +433,14 @@ def submit_entry_to_lds(name: str) -> dict[str, str | bool]:
 
 	doc.flags.skip_lds_submission = True
 	doc.submit()
-	return {"ok": True, "name": doc.name}
+	final_name = doc.name
+	if getattr(doc, 'entry_number', None) and frappe.db.exists(doc.doctype, doc.entry_number):
+		final_name = doc.entry_number
+	elif getattr(doc, 'lds_id', None):
+		matched = frappe.db.get_value(doc.doctype, {'lds_id': doc.lds_id}, 'name')
+		if matched:
+			final_name = matched
+	return {"ok": True, "name": final_name}
 
 
 def format_lds_validation_error(exc: LDSValidationError) -> str:
@@ -463,16 +479,186 @@ def _extract_submission_entry_number(entity_xml: str) -> str | None:
 	return node.text.strip()
 
 
+def _extract_submission_number(entity_xml: str) -> str | None:
+	try:
+		root = ET.fromstring(entity_xml)
+	except ET.ParseError:
+		return None
+	node = _find_child(root, 'Number')
+	if node is None or not node.text:
+		return None
+	return node.text.strip()
+
+
+def _repair_saved_entry_numbering_if_needed(doc, saved_xml: str) -> str:
+	if getattr(doc, 'lds_id', None):
+		return saved_xml
+	try:
+		root = ET.fromstring(saved_xml)
+	except ET.ParseError:
+		return saved_xml
+	if _extract_root_number(root) not in (None, '', '0'):
+		return saved_xml
+	client = get_client()
+	if not hasattr(client, 'calculate_entry_number_for_entry'):
+		return saved_xml
+	entity_id = _extract_root_id(root)
+	if not entity_id or not getattr(doc, 'filer_code', None):
+		return saved_xml
+
+	entity = _build_save_entity_from_root(root)
+	internal_number = _determine_repair_internal_number(doc, entity)
+	entry_number = client.calculate_entry_number_for_entry(
+		internal_number,
+		doc.filer_code,
+		entity_id,
+		adjust_sequence=True,
+	)
+	repaired_xml = _build_repair_payload(saved_xml, entity, internal_number, entry_number)
+	saved_xml = client.save_entry_xml(repaired_xml)
+	return _hydrate_saved_entry_xml(saved_xml, entry_number, doc.filer_code)
+
+
+
+
+def _recover_from_zero_number_duplicate(doc, entity_xml: str, submitted_entry_number: str | None, exc: LDSClientError) -> str | None:
+	if not _is_zero_number_duplicate_error(exc):
+		return None
+	client = get_client()
+	try:
+		zero_xml = client.fetch_entry_detail_xml_by_internal_number(0)
+	except LDSClientError:
+		return None
+
+	zero_entry_number = _extract_submission_entry_number(zero_xml)
+	repaired_zero_xml = _repair_saved_entry_numbering_if_needed(doc, zero_xml)
+	if zero_entry_number and submitted_entry_number and zero_entry_number == submitted_entry_number:
+		return repaired_zero_xml
+
+	try:
+		retried_xml = client.save_entry_xml(entity_xml)
+		retried_xml = _hydrate_saved_entry_xml(retried_xml, submitted_entry_number, doc.filer_code)
+		return _repair_saved_entry_numbering_if_needed(doc, retried_xml)
+	except LDSClientError as retry_exc:
+		if not _is_zero_number_duplicate_error(retry_exc):
+			return None
+		try:
+			zero_xml = client.fetch_entry_detail_xml_by_internal_number(0)
+		except LDSClientError:
+			return None
+		zero_entry_number = _extract_submission_entry_number(zero_xml)
+		if zero_entry_number and submitted_entry_number and zero_entry_number == submitted_entry_number:
+			return _repair_saved_entry_numbering_if_needed(doc, zero_xml)
+		return None
+
+
+def _build_repair_payload(saved_xml: str, root: ET.Element, internal_number: str, entry_number: str) -> str:
+	bond_type = _extract_root_text(root, 'BondType') or '9'
+	consolidated_release_entries = _extract_root_text(root, 'ConsolidatedReleaseEntries')
+	try:
+		return build_customs_entry_repair_xml(
+			saved_xml,
+			number=internal_number,
+			entry_number=entry_number,
+			broker_reference=entry_number,
+			bond_type=bond_type,
+			consolidated_release_entries='' if consolidated_release_entries is None else consolidated_release_entries,
+		)
+	except DotNetSerializerUnavailable:
+		entity = _build_save_entity_from_root(root)
+		_set_text(entity, 'Number', internal_number, None)
+		_set_text(entity, 'EntryNumber', entry_number, DOCUMENTS_NS)
+		_set_text(entity, 'BrokerReferenceNumber', entry_number, DOCUMENTS_NS)
+		_set_text(entity, 'BondType', bond_type, DOCUMENTS_NS)
+		_set_text(entity, 'ConsolidatedReleaseEntries', '' if consolidated_release_entries is None else consolidated_release_entries, DOCUMENTS_NS)
+		_reorder_children(entity, ENTRY_FIELD_RANK)
+		return ET.tostring(entity, encoding='unicode')
+
+
+def _is_zero_number_duplicate_error(exc: LDSClientError) -> bool:
+	message = str(exc)
+	return 'IX_Number' in message and '(0)' in message
+
+
+def _extract_root_number(root: ET.Element) -> str | None:
+	node = _find_direct_child(root, 'Number')
+	if node is None or not node.text:
+		return None
+	return node.text.strip()
+
+
+def _extract_root_id(root: ET.Element) -> int | None:
+	node = _find_direct_child(root, 'Id')
+	if node is None or not node.text:
+		return None
+	try:
+		return int(node.text.strip())
+	except (TypeError, ValueError):
+		return None
+
+
+def _determine_repair_internal_number(doc, root: ET.Element) -> str:
+	entry_number = _find_direct_child(root, 'EntryNumber')
+	if entry_number is not None and entry_number.text:
+		text = entry_number.text.strip()
+		if len(text) == 8 and text.isdigit():
+			return text[:7]
+	return str(_derive_local_entry_number_seed(doc))
+
+
+def _build_save_entity_from_root(root: ET.Element) -> ET.Element:
+	entity = ET.Element('entity')
+	for attr_name, value in root.attrib.items():
+		if attr_name == f'{{{XSI_NS}}}type':
+			continue
+		entity.set(attr_name, value)
+	for child in list(root):
+		entity.append(deepcopy(child))
+	return entity
+
+
 def _build_entry_submission_template_root(doc) -> ET.Element:
-	return _parse_new_entry_template_root()
+	try:
+		return _parse_new_entry_template_root()
+	except LDSClientError as exc:
+		if 'Index was outside the bounds of the array' not in str(exc):
+			raise
+		return _build_local_new_entry_template_root(doc)
 
 
-def _determine_submission_entry_number(template_root: ET.Element, doc) -> str | None:
+def _allocate_submission_numbers(template_root: ET.Element, doc) -> tuple[str | None, str | None]:
+	if getattr(doc, 'lds_id', None):
+		internal_number = _extract_template_number(template_root)
+		return internal_number, getattr(doc, 'entry_number', None)
+
+	client = get_client()
+	base_candidate = _derive_local_entry_number_seed(doc)
+	template_number = _extract_template_number(template_root)
+	if template_number and str(template_number).isdigit():
+		base_candidate = max(base_candidate, int(template_number))
+
+	if getattr(doc, 'filer_code', None) and hasattr(client, 'calculate_entry_number'):
+		for candidate in range(base_candidate, base_candidate + 200):
+			try:
+				entry_number = client.calculate_entry_number(str(candidate), doc.filer_code, check_unique=True, adjust_sequence=True)
+				return str(candidate), entry_number
+			except LDSClientError as exc:
+				message = str(exc)
+				if 'Such number already in database' in message or 'already exists' in message:
+					continue
+				raise
+
+	internal_number = str(base_candidate)
+	return internal_number, _determine_submission_entry_number(template_root, doc, internal_number)
+
+
+def _determine_submission_entry_number(template_root: ET.Element, doc, internal_number: str | None = None) -> str | None:
 	if getattr(doc, 'lds_id', None):
 		return getattr(doc, 'entry_number', None)
-	template_number = _extract_template_number(template_root)
-	if template_number and getattr(doc, 'filer_code', None):
-		return get_client().calculate_entry_number(template_number, doc.filer_code, check_unique=True, adjust_sequence=False)
+	if internal_number and getattr(doc, 'filer_code', None):
+		client = get_client()
+		if hasattr(client, 'calculate_entry_number'):
+			return client.calculate_entry_number(internal_number, doc.filer_code, check_unique=True, adjust_sequence=True)
 	entry_number = getattr(doc, 'entry_number', None)
 	if entry_number and not is_draft_placeholder_entry_number(entry_number):
 		return entry_number
@@ -494,6 +680,16 @@ def _extract_template_number(template_root: ET.Element) -> str | None:
 	return node.text.strip()
 
 
+def _extract_template_id(template_root: ET.Element) -> int | None:
+	node = _find_direct_child(template_root, 'Id')
+	if node is None or not node.text:
+		return None
+	try:
+		return int(node.text.strip())
+	except (TypeError, ValueError):
+		return None
+
+
 @frappe.whitelist()
 def get_new_entry_template_xml() -> str:
 	return get_client().new_entry_xml()
@@ -501,6 +697,37 @@ def get_new_entry_template_xml() -> str:
 
 def _parse_new_entry_template_root() -> ET.Element:
 	return _strip_serialization_attributes(ET.fromstring(get_client().new_entry_xml()))
+
+
+def _build_local_new_entry_template_root(doc) -> ET.Element:
+	root = ET.Element('template')
+	ET.SubElement(root, 'EntityGuid').text = str(uuid4())
+	ET.SubElement(root, 'Date').text = _as_datetime_text(getattr(doc, 'entry_date', None)) or _as_datetime_text(now_datetime())
+	ET.SubElement(root, 'Number').text = str(_derive_local_entry_number_seed(doc))
+	return root
+
+
+def _derive_local_entry_number_seed(doc) -> int:
+	try:
+		entry_numbers = frappe.get_all('Customs Entry', filters={'filer_code': getattr(doc, 'filer_code', None)}, pluck='entry_number', limit_page_length=0)
+	except Exception:
+		entry_numbers = []
+	bases = []
+	for value in entry_numbers:
+		text = (value or '').strip()
+		if len(text) == 8 and text.isdigit():
+			bases.append(int(text[:7]))
+	try:
+		stored_seed = int(frappe.defaults.get_global_default('andersoncb_erp_entry_number_seed') or FALLBACK_ENTRY_NUMBER_FLOOR)
+	except Exception:
+		stored_seed = FALLBACK_ENTRY_NUMBER_FLOOR
+	floor = max(FALLBACK_ENTRY_NUMBER_FLOOR, stored_seed)
+	seed = max([floor, *bases]) + 1
+	try:
+		frappe.defaults.set_global_default('andersoncb_erp_entry_number_seed', str(seed))
+	except Exception:
+		pass
+	return seed
 
 
 def _build_new_shipment_template_root() -> ET.Element:
@@ -757,6 +984,13 @@ def _extract_id_from_directory_entity(root: ET.Element) -> str | None:
 	if id_node is None or not id_node.text:
 		return None
 	return id_node.text.strip()
+
+
+def _extract_root_text(root: ET.Element, local_name: str) -> str | None:
+	node = _find_direct_child(root, local_name)
+	if node is None or node.text is None:
+		return None
+	return node.text
 
 
 def _reorder_children(parent: ET.Element, rank: dict[str, int]) -> None:

@@ -1,6 +1,6 @@
 import pytest
 
-from andersoncb_erp.integrations.lds import LDSEntrySummary, LDSClientError, build_rolling_window_criteria, extract_entry_elements, parse_soap_body, summary_from_entry_element
+from andersoncb_erp.integrations.lds import LDSClient, LDSEntrySummary, LDSClientError, build_rolling_window_criteria, extract_entry_elements, parse_soap_body, summary_from_entry_element
 
 
 SOAP_XML = """<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetPageResponse xmlns="http://tempuri.org/"><GetPageResult><Items><a:CustomsEntry xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents" xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/" z:Id="i1"><Id xmlns="">99</Id><EntryFilerCode xmlns="">SY1</EntryFilerCode><EntryNumber xmlns="">30029607</EntryNumber><Date xmlns="">2026-06-01</Date></a:CustomsEntry></Items></GetPageResult></GetPageResponse></soap:Body></soap:Envelope>"""
@@ -43,6 +43,26 @@ def test_build_rolling_window_criteria_uses_date_field():
     assert build_rolling_window_criteria(90).startswith('[Date] >= #') and build_rolling_window_criteria(90).endswith('#')
 
 
+def test_new_entry_xml_uses_documented_source_id_nil_shape(monkeypatch):
+    client = LDSClient(endpoint_url='https://example.test/BrokerService', username='user', password='pass')
+    captured = {}
+
+    def fake_request(manager_name, soap_action, body):
+        captured['manager_name'] = manager_name
+        captured['soap_action'] = soap_action
+        captured['body'] = body
+        return parse_soap_body('<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><NewResponse xmlns="http://tempuri.org/"><NewResult><Id xmlns="">1</Id></NewResult></NewResponse></soap:Body></soap:Envelope>')
+
+    monkeypatch.setattr(client, '_request_manager_xml', fake_request)
+
+    xml = client.new_entry_xml()
+
+    assert captured['manager_name'] == 'CustomsEntryManager'
+    assert captured['soap_action'] == 'http://tempuri.org/IEntityManagerOf_CustomsEntry/New'
+    assert '<sourceId i:nil="true"' in captured['body']
+    assert '<Id>1</Id>' in xml
+
+
 def test_parse_soap_body_rejects_invalid_xml():
     with pytest.raises(LDSClientError, match='valid XML'):
         parse_soap_body('not xml')
@@ -59,3 +79,66 @@ def test_parse_soap_response_raises_structured_validation_error():
 
     assert exc_info.value.details[0].property_name == 'Importer'
     assert exc_info.value.details[0].error_code == '6000'
+
+
+def test_calculate_entry_number_for_entry_uses_documented_request_shape(monkeypatch):
+    client = LDSClient(endpoint_url='https://example.test/BrokerService', username='user', password='pass')
+    captured = {}
+
+    def fake_request(manager_name, soap_action, body):
+        captured['manager_name'] = manager_name
+        captured['soap_action'] = soap_action
+        captured['body'] = body
+        return parse_soap_body('<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><CalculateEntryNumberForEntryResponse xmlns="http://tempuri.org/"><CalculateEntryNumberForEntryResult>30040521</CalculateEntryNumberForEntryResult></CalculateEntryNumberForEntryResponse></soap:Body></soap:Envelope>')
+
+    monkeypatch.setattr(client, '_request_manager_xml', fake_request)
+
+    value = client.calculate_entry_number_for_entry(3004052, 'SY1', 1670, adjust_sequence=True)
+
+    assert value == '30040521'
+    assert captured['manager_name'] == 'CustomsEntryManager'
+    assert captured['soap_action'] == 'http://tempuri.org/ICustomsEntryManager/CalculateEntryNumberForEntry'
+    assert '<number>3004052</number>' in captured['body']
+    assert '<filerCode>SY1</filerCode>' in captured['body']
+    assert '<customsEntryId>1670</customsEntryId>' in captured['body']
+    assert '<adjustSequence>true</adjustSequence>' in captured['body']
+
+
+def test_fetch_entry_detail_xml_by_internal_number_uses_document_contract(monkeypatch):
+    client = LDSClient(endpoint_url='https://example.test/BrokerService', username='user', password='pass')
+    captured = {}
+
+    def fake_request(manager_name, soap_action, body):
+        captured['manager_name'] = manager_name
+        captured['soap_action'] = soap_action
+        captured['body'] = body
+        return parse_soap_body('<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetByNumberResponse xmlns="http://tempuri.org/"><GetByNumberResult><Id xmlns="">1670</Id><EntryNumber xmlns="">30040521</EntryNumber></GetByNumberResult></GetByNumberResponse></soap:Body></soap:Envelope>')
+
+    monkeypatch.setattr(client, '_request_manager_xml', fake_request)
+
+    xml = client.fetch_entry_detail_xml_by_internal_number(3004052)
+
+    assert '<EntryNumber>30040521</EntryNumber>' in xml
+    assert captured['manager_name'] == 'CustomsEntryManager'
+    assert captured['soap_action'] == 'http://tempuri.org/IEntityManagerDocumentOf_CustomsEntry/GetByNumber'
+    assert '<number>3004052</number>' in captured['body']
+
+
+def test_set_customs_entry_ready_status_uses_documented_request_shape(monkeypatch):
+    client = LDSClient(endpoint_url='https://example.test/BrokerService', username='user', password='pass')
+    captured = {}
+
+    def fake_request(manager_name, soap_action, body):
+        captured['manager_name'] = manager_name
+        captured['soap_action'] = soap_action
+        captured['body'] = body
+        return parse_soap_body('<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><SetDocumentReadyStatusResponse xmlns="http://tempuri.org/"/></soap:Body></soap:Envelope>')
+
+    monkeypatch.setattr(client, '_request_manager_xml', fake_request)
+
+    client.set_customs_entry_ready_status(1670, True)
+
+    assert captured['manager_name'] == 'CustomsEntryManager'
+    assert captured['soap_action'] == 'http://tempuri.org/ICustomsEntryManager/SetDocumentReadyStatus'
+    assert '<id>1670</id>' in captured['body']
+    assert '<ready>true</ready>' in captured['body']

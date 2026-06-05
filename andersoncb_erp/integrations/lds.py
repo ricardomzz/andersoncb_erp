@@ -182,7 +182,11 @@ class LDSClient:
         )
 
     def new_entry_xml(self) -> str:
-        body = f'<New xmlns="{TEMPURI_NS}" />'
+        body = (
+            f'<New xmlns="{TEMPURI_NS}">'
+            '<sourceId i:nil="true" xmlns:i="http://www.w3.org/2001/XMLSchema-instance"/>'
+            '</New>'
+        )
         body_element = self._request_manager_xml(
             'CustomsEntryManager',
             'http://tempuri.org/IEntityManagerOf_CustomsEntry/New',
@@ -210,6 +214,25 @@ class LDSClient:
         return ET.tostring(entities[0], encoding='unicode')
 
 
+    def calculate_entry_number_for_entry(self, number: str | int, filer_code: str, customs_entry_id: str | int, adjust_sequence: bool = True) -> str:
+        body = (
+            f'<CalculateEntryNumberForEntry xmlns="{TEMPURI_NS}">'
+            f'<number>{xml_escape(number)}</number>'
+            f'<filerCode>{xml_escape(filer_code)}</filerCode>'
+            f'<customsEntryId>{xml_escape(customs_entry_id)}</customsEntryId>'
+            f'<adjustSequence>{str(bool(adjust_sequence)).lower()}</adjustSequence>'
+            '</CalculateEntryNumberForEntry>'
+        )
+        body_element = self._request_manager_xml(
+            'CustomsEntryManager',
+            'http://tempuri.org/ICustomsEntryManager/CalculateEntryNumberForEntry',
+            body,
+        )
+        value = find_text(body_element, 'CalculateEntryNumberForEntryResult')
+        if not value:
+            raise LDSClientError('CustomsEntryManager/CalculateEntryNumberForEntry did not return an entry number.')
+        return value
+
     def calculate_entry_number(self, number: str | int, filer_code: str, check_unique: bool = True, adjust_sequence: bool = False) -> str:
         body = (
             f'<CalculateEntryNumber xmlns="{TEMPURI_NS}">'
@@ -228,6 +251,54 @@ class LDSClient:
         if not value:
             raise LDSClientError('CustomsEntryManager/CalculateEntryNumber did not return an entry number.')
         return value
+
+    def calculate_entry_number_for_entry(self, number: str | int, filer_code: str, customs_entry_id: str | int, adjust_sequence: bool = False) -> str:
+        body = (
+            f'<CalculateEntryNumberForEntry xmlns="{TEMPURI_NS}">'
+            f'<number>{xml_escape(number)}</number>'
+            f'<filerCode>{xml_escape(filer_code)}</filerCode>'
+            f'<customsEntryId>{xml_escape(customs_entry_id)}</customsEntryId>'
+            f'<adjustSequence>{str(bool(adjust_sequence)).lower()}</adjustSequence>'
+            '</CalculateEntryNumberForEntry>'
+        )
+        body_element = self._request_manager_xml(
+            'CustomsEntryManager',
+            'http://tempuri.org/ICustomsEntryManager/CalculateEntryNumberForEntry',
+            body,
+        )
+        value = find_text(body_element, 'CalculateEntryNumberForEntryResult')
+        if not value:
+            raise LDSClientError('CustomsEntryManager/CalculateEntryNumberForEntry did not return an entry number.')
+        return value
+
+    def fetch_entry_detail_xml_by_internal_number(self, number: str | int) -> str:
+        body = (
+            f'<GetByNumber xmlns="{TEMPURI_NS}">'
+            f'<number>{xml_escape(number)}</number>'
+            '</GetByNumber>'
+        )
+        body_element = self._request_manager_xml(
+            'CustomsEntryManager',
+            'http://tempuri.org/IEntityManagerDocumentOf_CustomsEntry/GetByNumber',
+            body,
+        )
+        entry_elements = extract_named_elements(body_element, ('CustomsEntry', 'GetByNumberResult'), predicate=lambda e: has_descendant_text(e, 'EntryNumber'))
+        if not entry_elements:
+            raise LDSClientError('CustomsEntryManager/GetByNumber did not return an entry payload.')
+        return ET.tostring(entry_elements[0], encoding='unicode')
+
+    def set_customs_entry_ready_status(self, entity_id: str | int, ready: bool) -> None:
+        body = (
+            f'<SetDocumentReadyStatus xmlns="{TEMPURI_NS}">'
+            f'<id>{xml_escape(entity_id)}</id>'
+            f'<ready>{str(bool(ready)).lower()}</ready>'
+            '</SetDocumentReadyStatus>'
+        )
+        self._request_manager_xml(
+            'CustomsEntryManager',
+            'http://tempuri.org/ICustomsEntryManager/SetDocumentReadyStatus',
+            body,
+        )
 
     def save_contact_xml(self, entity_xml: str) -> str:
         return self._save_entity_xml(

@@ -52,7 +52,6 @@ class CustomsEntry(Document):
                 self.name,
                 self.entry_number,
                 force=True,
-                ignore_permissions=True,
                 show_alert=False,
             )
 
