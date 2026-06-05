@@ -24,6 +24,8 @@ def _backfill_with_retry(name: str):
         try:
             doc = frappe.get_doc("Customs Entry", name)
             mapped = parse_entry_xml(doc.raw_payload_xml)
+            frappe.db.delete("Entry Fee", {"parent": name, "parenttype": "Customs Entry", "parentfield": "fees"})
+            doc.reload()
             doc.set("fees", mapped.get("fees") or [])
             if doc.docstatus == 1:
                 doc.flags.ignore_validate_update_after_submit = True

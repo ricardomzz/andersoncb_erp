@@ -340,9 +340,13 @@ def map_fees(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[dict[st
 	rows = []
 	default_currency = child_text(root, 'Currency', ref_index=ref_index)
 	for fee in collection_children(root, 'StatementDailyEntries', 'StatementDailyEntry', ref_index=ref_index):
+		fee_type = child_text(fee, 'Name', ref_index=ref_index) or child_text(fee, 'FeeType', ref_index=ref_index)
+		amount = to_float(child_text(fee, 'TotalAmountDue', ref_index=ref_index) or child_text(fee, 'Amount', ref_index=ref_index))
+		if not fee_type and amount in (None, 0, 0.0):
+			continue
 		rows.append({
-			'fee_type': child_text(fee, 'Name', ref_index=ref_index) or child_text(fee, 'FeeType', ref_index=ref_index),
-			'amount': to_float(child_text(fee, 'TotalAmountDue', ref_index=ref_index) or child_text(fee, 'Amount', ref_index=ref_index)),
+			'fee_type': fee_type,
+			'amount': amount,
 			'currency': child_text(fee, 'Currency', ref_index=ref_index) or default_currency,
 			'description': child_text(fee, 'Description', ref_index=ref_index),
 		})
