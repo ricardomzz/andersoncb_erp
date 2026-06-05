@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
+from xml.etree import ElementTree as ET
 
 import frappe
 from frappe.utils import add_to_date, now_datetime
@@ -31,7 +32,23 @@ def normalize_source_status(value: str | None) -> str | None:
 
 def has_true_xml_flag(raw_payload_xml: str | None, tag_name: str) -> bool:
 	raw_text = raw_payload_xml or ""
-	return f"<{tag_name}>true</" in raw_text
+	if not raw_text:
+		return False
+	try:
+		root = ET.fromstring(raw_text)
+	except ET.ParseError:
+		return False
+	for element in root.iter():
+		if localname(element.tag) != tag_name:
+			continue
+		text = (element.text or '').strip().lower()
+		if text == 'true':
+			return True
+	return False
+
+
+def localname(tag: str) -> str:
+	return tag.split('}', 1)[-1]
 
 
 
@@ -41,28 +58,30 @@ def derive_entry_status(data: dict[str, Any], source_active: int | bool | None =
 		return "Archived"
 
 	explicit_status = normalize_source_status(data.get("status"))
-	if explicit_status:
+	if explicit_status in {"Imported", "Entered", "Filed", "Released", "Archived"}:
 		return explicit_status
 
-	raw_payload_xml = data.get("raw_payload_xml") or ""
-	if has_true_xml_flag(raw_payload_xml, "PostSummaryCorrection"):
-		return "PSC Filed"
 	if data.get("release_date"):
 		return "Released"
-	if data.get("filing_date"):
+	if data.get("filing_date") or data.get("preliminary_statement_print_date"):
 		return "Filed"
-	if data.get("entry_date"):
+	if data.get("entry_date") or data.get("estimated_entry_date"):
 		return "Entered"
 	return "Imported"
 
 
+def derive_psc_status(data: dict[str, Any]) -> str:
+	if data.get("psc_accelerated_liquidation_flag") or has_true_xml_flag(data.get("raw_payload_xml"), "PostSummaryCorrectionAcceleratedLiquidation"):
+		return "PSC Accelerated Liquidation"
+	if data.get("psc_flag") or has_true_xml_flag(data.get("raw_payload_xml"), "PostSummaryCorrection"):
+		return "PSC"
+	return "None"
+
+
 
 def derive_liquidation_status(data: dict[str, Any]) -> str:
-	raw_payload_xml = data.get("raw_payload_xml") or ""
 	if data.get("liquidation_date"):
 		return "Liquidated"
-	if has_true_xml_flag(raw_payload_xml, "PostSummaryCorrectionAcceleratedLiquidation"):
-		return "Accelerated Liquidation"
 	return "Not Liquidated"
 
 
@@ -175,6 +194,7 @@ def _upsert_customs_entry_xml(entry_xml: str, fallback_filer_code: str | None = 
 		mapped['filer_code'] = fallback_filer_code
 	mapped = resolve_master_links(mapped, synced_on=now_datetime(), create_missing=False)
 	mapped['status'] = derive_entry_status(mapped, source_active=1)
+	mapped['psc_status'] = derive_psc_status(mapped)
 	mapped['liquidation_status'] = derive_liquidation_status(mapped)
 	entry_number = mapped['entry_number']
 	existing_name = frappe.db.exists('Customs Entry', {'entry_number': entry_number})
@@ -244,10 +264,16 @@ def _archive_missing_entries(mode: str, seen_entry_numbers: set[str], rolling_wi
 		doc.status = derive_entry_status({
 			'status': doc.status,
 			'entry_date': doc.entry_date,
+			'estimated_entry_date': getattr(doc, 'estimated_entry_date', None),
 			'filing_date': doc.filing_date,
+			'preliminary_statement_print_date': getattr(doc, 'preliminary_statement_print_date', None),
 			'release_date': doc.release_date,
 			'raw_payload_xml': doc.raw_payload_xml,
 		}, source_active=0)
+		doc.psc_status = derive_psc_status({
+			'psc_status': getattr(doc, 'psc_status', None),
+			'raw_payload_xml': doc.raw_payload_xml,
+		})
 		doc.liquidation_status = derive_liquidation_status({
 			'liquidation_date': doc.liquidation_date,
 			'raw_payload_xml': doc.raw_payload_xml,

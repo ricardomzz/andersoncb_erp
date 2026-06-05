@@ -9,6 +9,7 @@ def parse_entry_xml(entry_xml: str) -> dict[str, Any]:
 	root = ET.fromstring(entry_xml)
 	ref_index = build_ref_index(root)
 	importer_profile_data = extract_importer_profile_data(root, ref_index)
+	creator_lds_id = child_text(root, 'Creator_Id', ref_index=ref_index) or child_text(root, 'Creator', ref_index=ref_index)
 	invoices = map_invoices(root, ref_index)
 	currency = child_text(root, 'Currency', ref_index=ref_index) or (invoices[0].get('currency') if invoices else None)
 	return {
@@ -16,21 +17,34 @@ def parse_entry_xml(entry_xml: str) -> dict[str, Any]:
 		'filer_code': child_text(root, 'FilerCode', ref_index=ref_index) or child_text(root, 'EntryFilerCode', ref_index=ref_index),
 		'entry_number': require_text(root, 'EntryNumber', ref_index=ref_index),
 		'source_active': 1,
-		'entry_date': to_date_string(child_text(root, 'Date', ref_index=ref_index) or child_text(root, 'EstimatedEntryDate', ref_index=ref_index)),
-		'filing_date': to_date_string(child_text(root, 'FilingDate', ref_index=ref_index) or child_text(root, 'PreliminaryStatementPrintDate', ref_index=ref_index)),
+		'entry_date': to_date_string(child_text(root, 'Date', ref_index=ref_index)),
+		'estimated_entry_date': to_date_string(child_text(root, 'EstimatedEntryDate', ref_index=ref_index)),
+		'filing_date': to_date_string(child_text(root, 'FilingDate', ref_index=ref_index)),
+		'preliminary_statement_print_date': to_date_string(child_text(root, 'PreliminaryStatementPrintDate', ref_index=ref_index)),
 		'release_date': to_date_string(child_text(root, 'ReleaseDate', ref_index=ref_index) or child_text(root, 'DateOfRelease', ref_index=ref_index)),
 		'liquidation_date': to_date_string(child_text(root, 'LiquidationDate', ref_index=ref_index) or child_text(root, 'Liquidation', ref_index=ref_index)),
+		'arrival_date': to_date_string(child_text(root, 'DateOfArrival', ref_index=ref_index) or first_nested_text(root, [('Shipments', 'Shipment', 'DateOfArrival')], ref_index=ref_index) or first_nested_text(root, [('Shipments', 'Shipment', 'DateOfImport')], ref_index=ref_index)),
 		'entry_type': child_text(root, 'EntryType', ref_index=ref_index),
 		'status': child_text(root, 'Status', ref_index=ref_index) or child_text(root, 'EntryStatus', ref_index=ref_index),
-		'port_of_entry': first_nested_text(root, [('PortOfEntry', 'Code'), ('PortOfUnlading', 'Code')], ref_index=ref_index),
+		'psc_flag': to_bool(find_text(root, 'PostSummaryCorrection', ref_index=ref_index)),
+		'psc_accelerated_liquidation_flag': to_bool(find_text(root, 'PostSummaryCorrectionAcceleratedLiquidation', ref_index=ref_index)),
+		'port_of_entry': first_nested_text(root, [('PortOfEntry', 'Code')], ref_index=ref_index),
+		'port_of_unlading': first_nested_text(root, [('PortOfUnlading', 'Code')], ref_index=ref_index),
 		'transport_mode': child_text(root, 'TransportationMode', ref_index=ref_index),
+		'conveyance_name': child_text(root, 'ConveyanceName', ref_index=ref_index),
+		'trip_identifier': child_text(root, 'TripIdentifier', ref_index=ref_index),
+		'payment_type': child_text(root, 'PaymentType', ref_index=ref_index),
 		'importer_name': importer_profile_data.get('display_name') if importer_profile_data else None,
+		'importer_lds_id': (importer_profile_data or {}).get('lds_id') or child_text(root, 'Importer_Id', ref_index=ref_index),
 		'client_ref': child_text(root, 'ClientRef', ref_index=ref_index) or first_nested_text(root, [('Shipments', 'Shipment', 'ClientRef')], ref_index=ref_index),
-		'created_by': child_text(root, 'Creator', ref_index=ref_index) or child_text(root, 'Creator_Id', ref_index=ref_index),
+		'created_by': creator_lds_id,
+		'creator_lds_id': creator_lds_id,
 		'importer_number': _importer_number(importer_profile_data),
 		'consignee_name': first_nested_text(root, [('Consignee', 'Name')], ref_index=ref_index) or (importer_profile_data.get('display_name') if importer_profile_data else None),
 		'broker_reference': child_text(root, 'BrokerReference', ref_index=ref_index) or child_text(root, 'BrokerReferenceNumber', ref_index=ref_index) or child_text(root, 'ReferenceNumber', ref_index=ref_index),
-		'bond_number': child_text(root, 'BondNumber', ref_index=ref_index) or child_text(root, 'SuretyCode', ref_index=ref_index),
+		'bond_number': child_text(root, 'BondNumber', ref_index=ref_index),
+		'bond_type': child_text(root, 'BondType', ref_index=ref_index),
+		'surety_code': child_text(root, 'SuretyCode', ref_index=ref_index),
 		'house_bill': child_text(root, 'HouseBill', ref_index=ref_index) or first_nested_text(root, [('Shipments', 'Shipment', 'HouseBillNumber')], ref_index=ref_index),
 		'master_bill': child_text(root, 'MasterBill', ref_index=ref_index) or first_nested_text(root, [('Shipments', 'Shipment', 'MasterBillNumber')], ref_index=ref_index),
 		'total_entered_value': to_float(child_text(root, 'TotalEnteredValue', ref_index=ref_index) or child_text(root, 'EnteredValue', ref_index=ref_index)) or sum_numeric(invoice.get('invoice_amount') for invoice in invoices),
@@ -206,6 +220,13 @@ def dedupe_elements(elements: list[ET.Element]) -> list[ET.Element]:
 	return result
 
 
+def to_bool(value: Any) -> bool:
+	if isinstance(value, bool):
+		return value
+	text = str(value or '').strip().lower()
+	return text == 'true'
+
+
 def to_float(value: Any) -> float | None:
 	if value in (None, ''):
 		return None
@@ -250,6 +271,11 @@ def map_shipments(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[di
 	rows = []
 	for shipment in collection_children(root, 'Shipments', 'Shipment', ref_index=ref_index):
 		carrier_data = extract_carrier_profile_data(shipment, ref_index)
+		shipment_port_of_entry = first_nested_text(shipment, [('PortOfEntry', 'Code')], ref_index=ref_index) or first_nested_text(root, [('PortOfEntry', 'Code')], ref_index=ref_index)
+		shipment_port_of_unlading = first_nested_text(shipment, [('PortOfUnlading', 'Code')], ref_index=ref_index) or first_nested_text(root, [('PortOfUnlading', 'Code')], ref_index=ref_index)
+		date_of_arrival = to_date_string(child_text(shipment, 'ArrivalDate', ref_index=ref_index) or child_text(shipment, 'DateOfArrival', ref_index=ref_index))
+		date_of_import = to_date_string(child_text(shipment, 'DateOfImport', ref_index=ref_index))
+		date_of_export = to_date_string(child_text(shipment, 'DateOfExport', ref_index=ref_index))
 		rows.append({
 			'shipment_no': child_text(shipment, 'ShipmentNo', ref_index=ref_index) or child_text(shipment, 'ShipmentNumber', ref_index=ref_index) or child_text(shipment, 'Number', ref_index=ref_index) or child_text(shipment, 'Id', ref_index=ref_index),
 			'mode': child_text(shipment, 'TransportationMode', ref_index=ref_index) or child_text(root, 'TransportationMode', ref_index=ref_index),
@@ -257,8 +283,13 @@ def map_shipments(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[di
 			'carrier_data': carrier_data,
 			'voyage_or_flight': first_nested_text(shipment, [('BookingLoads', 'ShipmentLoad', 'Name'), ('Loads', 'ShipmentLoad', 'Name'), ('BookingLoads', 'Name'), ('Loads', 'Name')], ref_index=ref_index) or child_text(root, 'TripIdentifier', ref_index=ref_index),
 			'origin': first_nested_text(shipment, [('ForeignPort', 'Code'), ('ForeignPortOfLading', 'Code')], ref_index=ref_index) or child_text(shipment, 'CountryOfExport', ref_index=ref_index),
-			'destination': first_nested_text(shipment, [('PortOfEntry', 'Code'), ('PortOfUnlading', 'Code')], ref_index=ref_index) or first_nested_text(root, [('PortOfEntry', 'Code'), ('PortOfUnlading', 'Code')], ref_index=ref_index),
-			'arrival_date': to_date_string(child_text(shipment, 'ArrivalDate', ref_index=ref_index) or child_text(shipment, 'DateOfImport', ref_index=ref_index) or child_text(shipment, 'Date', ref_index=ref_index)),
+			'destination': shipment_port_of_unlading or shipment_port_of_entry,
+			'port_of_entry': shipment_port_of_entry,
+			'port_of_unlading': shipment_port_of_unlading,
+			'arrival_date': date_of_arrival,
+			'date_of_arrival': date_of_arrival,
+			'date_of_import': date_of_import,
+			'date_of_export': date_of_export,
 		})
 	return dedupe_rows(rows, 'shipment_no')
 

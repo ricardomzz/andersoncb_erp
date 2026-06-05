@@ -14,12 +14,16 @@
     "entry_number",
     "filer_code",
     "status",
+    "psc_status",
     "liquidation_status",
     "header_dates_column",
     "entry_date",
+    "estimated_entry_date",
     "filing_date",
+    "preliminary_statement_print_date",
     "release_date",
     "liquidation_date",
+    "arrival_date",
     "header_party_column",
     "client_ref",
     "importer_profile",
@@ -33,12 +37,18 @@
     "consignee_name",
     "broker_reference",
     "bond_number",
+    "bond_type",
+    "surety_code",
     "house_bill",
     "master_bill",
     "shipment_section",
     "entry_type",
     "port_of_entry",
+    "port_of_unlading",
     "transport_mode",
+    "conveyance_name",
+    "trip_identifier",
+    "payment_type",
     "shipments",
     "commercial_section",
     "invoices",
@@ -50,6 +60,8 @@
     "references",
     "system_section",
     "lds_id",
+    "importer_lds_id",
+    "creator_lds_id",
     "last_lds_submission_on",
     "lds_submission_errors",
     "source_active",
@@ -87,6 +99,13 @@
       "read_only": 1
     },
     {
+      "fieldname": "psc_status",
+      "fieldtype": "Data",
+      "label": "PSC Status",
+      "read_only": 1,
+      "in_list_view": 0
+    },
+    {
       "fieldname": "liquidation_status",
       "fieldtype": "Data",
       "label": "Liquidation Status",
@@ -104,9 +123,19 @@
       "in_list_view": 1
     },
     {
+      "fieldname": "estimated_entry_date",
+      "fieldtype": "Date",
+      "label": "Estimated Entry Date"
+    },
+    {
       "fieldname": "filing_date",
       "fieldtype": "Date",
       "label": "Filing Date"
+    },
+    {
+      "fieldname": "preliminary_statement_print_date",
+      "fieldtype": "Date",
+      "label": "Preliminary Statement Print Date"
     },
     {
       "fieldname": "release_date",
@@ -119,6 +148,11 @@
       "fieldtype": "Date",
       "label": "Liquidation Date",
       "read_only": 1
+    },
+    {
+      "fieldname": "arrival_date",
+      "fieldtype": "Date",
+      "label": "Arrival Date"
     },
     {
       "fieldname": "header_party_column",
@@ -162,7 +196,7 @@
     {
       "fieldname": "created_by",
       "fieldtype": "Data",
-      "label": "Created By",
+      "label": "Creator LDS Id",
       "read_only": 1,
       "in_list_view": 1
     },
@@ -193,6 +227,17 @@
       "label": "Bond Number"
     },
     {
+      "fieldname": "bond_type",
+      "fieldtype": "Link",
+      "label": "Bond Type",
+      "options": "Bond Type"
+    },
+    {
+      "fieldname": "surety_code",
+      "fieldtype": "Data",
+      "label": "Surety Code"
+    },
+    {
       "fieldname": "house_bill",
       "fieldtype": "Data",
       "label": "House Bill"
@@ -209,20 +254,45 @@
     },
     {
       "fieldname": "entry_type",
-      "fieldtype": "Data",
+      "fieldtype": "Link",
       "label": "Entry Type",
-      "in_list_view": 0
+      "in_list_view": 0,
+      "options": "Customs Entry Type"
     },
     {
       "fieldname": "port_of_entry",
-      "fieldtype": "Data",
+      "fieldtype": "Link",
       "label": "Port Of Entry",
-      "in_list_view": 0
+      "in_list_view": 0,
+      "options": "Customs Port"
+    },
+    {
+      "fieldname": "port_of_unlading",
+      "fieldtype": "Link",
+      "label": "Port Of Unlading",
+      "options": "Customs Port"
     },
     {
       "fieldname": "transport_mode",
+      "fieldtype": "Link",
+      "label": "Transport Mode",
+      "options": "Transportation Mode"
+    },
+    {
+      "fieldname": "conveyance_name",
       "fieldtype": "Data",
-      "label": "Transport Mode"
+      "label": "Conveyance Name"
+    },
+    {
+      "fieldname": "trip_identifier",
+      "fieldtype": "Data",
+      "label": "Trip Identifier"
+    },
+    {
+      "fieldname": "payment_type",
+      "fieldtype": "Link",
+      "label": "Payment Type",
+      "options": "Payment Type"
     },
     {
       "fieldname": "commercial_section",
@@ -252,6 +322,20 @@
       "label": "LDS Id",
       "hidden": 1,
       "read_only": 1
+    },
+    {
+      "fieldname": "importer_lds_id",
+      "fieldtype": "Data",
+      "label": "Importer LDS Id",
+      "read_only": 1,
+      "hidden": 1
+    },
+    {
+      "fieldname": "creator_lds_id",
+      "fieldtype": "Data",
+      "label": "Creator LDS Id",
+      "read_only": 1,
+      "hidden": 1
     },
     {
       "fieldname": "last_lds_submission_on",

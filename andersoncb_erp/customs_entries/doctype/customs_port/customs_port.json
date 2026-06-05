@@ -1,0 +1,113 @@
+{
+  "doctype": "DocType",
+  "name": "Customs Port",
+  "module": "Customs Entries",
+  "engine": "InnoDB",
+  "autoname": "field:code",
+  "title_field": "port_name",
+  "track_changes": 1,
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "search_fields": "port_name,city,state,region,airport_iata_code",
+  "field_order": [
+    "code",
+    "port_name",
+    "city",
+    "state",
+    "region",
+    "airport_iata_code",
+    "port_of_unlading",
+    "lds_id",
+    "source_active",
+    "last_seen_in_source_on",
+    "last_synced_on",
+    "raw_payload_xml"
+  ],
+  "fields": [
+    {
+      "fieldname": "code",
+      "fieldtype": "Data",
+      "label": "Code",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "port_name",
+      "fieldtype": "Data",
+      "label": "Port Name",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "city",
+      "fieldtype": "Data",
+      "label": "City"
+    },
+    {
+      "fieldname": "state",
+      "fieldtype": "Data",
+      "label": "State"
+    },
+    {
+      "fieldname": "region",
+      "fieldtype": "Data",
+      "label": "Region"
+    },
+    {
+      "fieldname": "airport_iata_code",
+      "fieldtype": "Data",
+      "label": "Airport IATA Code"
+    },
+    {
+      "fieldname": "port_of_unlading",
+      "fieldtype": "Check",
+      "label": "Port Of Unlading",
+      "default": "0"
+    },
+    {
+      "fieldname": "lds_id",
+      "fieldtype": "Data",
+      "label": "LDS Id",
+      "hidden": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "source_active",
+      "fieldtype": "Check",
+      "label": "Source Active",
+      "default": "0",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_seen_in_source_on",
+      "fieldtype": "Datetime",
+      "label": "Last Seen In Source On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_synced_on",
+      "fieldtype": "Datetime",
+      "label": "Last Synced On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "raw_payload_xml",
+      "fieldtype": "Code",
+      "label": "Raw Payload XML",
+      "options": "XML",
+      "hidden": 1,
+      "read_only": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ],
+  "actions": [],
+  "show_title_field_in_link": 1
+}

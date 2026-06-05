@@ -407,7 +407,7 @@ def test_build_submission_entity_xml_ignores_existing_entry_raw_payload(monkeypa
     assert '<ns0:PortOfEntry>' not in xml and '<PortOfEntry>' not in xml
 
 
-def test_validate_customs_entry_for_submission_requires_submitted_master_records(monkeypatch):
+def test_validate_customs_entry_for_submission_allows_master_records_without_current_env_lds_ids(monkeypatch):
     def fake_draft_get_cached_doc(doctype, name):
         if doctype == 'Importer Profile':
             return SimpleNamespace(name=name, display_name='Importer Co', importer_code='IMP-1', cbp_number=None, irs_number=None, raw_payload_xml=None, lds_id=None, docstatus=0)
@@ -420,9 +420,49 @@ def test_validate_customs_entry_for_submission_requires_submitted_master_records
     issues = validate_customs_entry_for_submission(make_doc())
 
     messages = {issue.message for issue in issues}
-    assert 'Importer Profile must be submitted to LDS before it can be used on a Customs Entry.' in messages
-    assert 'Each shipment carrier must be submitted to LDS before it can be used on a Customs Entry.' in messages
+    assert 'Importer Profile must have a display name.' not in messages
+    assert 'Importer Profile must have an importer code, CBP number, or IRS number.' not in messages
+    assert 'Each shipment carrier must have a display name or carrier code.' not in messages
 
+
+
+
+def test_build_submission_entity_xml_uses_runtime_code_lookup_for_env_specific_ids(monkeypatch):
+    def fake_env_mixed_get_cached_doc(doctype, name):
+        if doctype == 'Importer Profile':
+            return SimpleNamespace(name=name, display_name='Importer Co', importer_code='IMP-1', cbp_number=None, irs_number=None, raw_payload_xml='<Contact><Id>493</Id><Code>IMP-1</Code><Name>Importer Co</Name></Contact>', lds_id='493', docstatus=1)
+        if doctype == 'Carrier':
+            return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR-1', raw_payload_xml='<Carrier><Id>1488</Id><Code>CAR-1</Code><Name>Carrier Co</Name></Carrier>', lds_id='1488', docstatus=1)
+        raise AssertionError((doctype, name))
+
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_env_mixed_get_cached_doc)
+
+    class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/"><EntityGuid>guid-1</EntityGuid><Date>2026-06-04T17:37:45</Date><Number>3003990</Number><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def fetch_importer_contact_by_code_xml(self, code):
+            assert code == 'IMP-1'
+            return '<Contact><Id>704</Id><Code>IMP-1</Code><Name>Importer Co</Name></Contact>'
+
+        def fetch_carrier_by_code_xml(self, code):
+            assert code == 'CAR-1'
+            return '<Carrier><Id>5121</Id><Code>CAR-1</Code><Name>Carrier Co</Name></Carrier>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
+    monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
+    xml = build_submission_entity_xml(make_doc())
+
+    assert 'Importer_Id>704<' in xml
+    assert 'Carrier_Id>5121<' in xml
+    assert 'PortOfEntry_Id>6<' in xml
+    assert '<Id>493</Id>' not in xml
+    assert '<Id>1488</Id>' not in xml
 
 def test_build_submission_entity_xml_orders_entry_fields_for_lds_contract(monkeypatch):
     monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)

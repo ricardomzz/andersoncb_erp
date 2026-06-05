@@ -16,7 +16,12 @@
     "voyage_or_flight",
     "origin",
     "destination",
-    "arrival_date"
+    "port_of_entry",
+    "arrival_date",
+    "date_of_arrival",
+    "port_of_unlading",
+    "date_of_import",
+    "date_of_export"
   ],
   "fields": [
     {
@@ -27,9 +32,10 @@
     },
     {
       "fieldname": "mode",
-      "fieldtype": "Data",
+      "fieldtype": "Link",
       "label": "Mode",
-      "in_list_view": 1
+      "in_list_view": 1,
+      "options": "Transportation Mode"
     },
     {
       "fieldname": "carrier",
@@ -57,12 +63,39 @@
     {
       "fieldname": "destination",
       "fieldtype": "Data",
-      "label": "Destination"
+      "label": "Destination (Legacy)"
+    },
+    {
+      "fieldname": "port_of_entry",
+      "fieldtype": "Link",
+      "label": "Port Of Entry",
+      "options": "Customs Port"
+    },
+    {
+      "fieldname": "port_of_unlading",
+      "fieldtype": "Link",
+      "label": "Port Of Unlading",
+      "options": "Customs Port"
     },
     {
       "fieldname": "arrival_date",
       "fieldtype": "Date",
       "label": "Arrival Date"
+    },
+    {
+      "fieldname": "date_of_arrival",
+      "fieldtype": "Date",
+      "label": "Date Of Arrival"
+    },
+    {
+      "fieldname": "date_of_import",
+      "fieldtype": "Date",
+      "label": "Date Of Import"
+    },
+    {
+      "fieldname": "date_of_export",
+      "fieldtype": "Date",
+      "label": "Date Of Export"
     }
   ],
   "permissions": []

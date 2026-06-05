@@ -17,7 +17,7 @@ from andersoncb_erp.services.dotnet_serializer import (
 	build_customs_entry_repair_xml,
 )
 from andersoncb_erp.services.mapping import parse_entry_xml
-from andersoncb_erp.services.master_data import resolve_master_links
+from andersoncb_erp.services.master_data import parse_carrier_xml, parse_importer_profile_xml, resolve_master_links
 from andersoncb_erp.services.sync import (
 	CHILD_TABLE_FIELDS as SYNC_CHILD_TABLE_FIELDS,
 	derive_entry_status,
@@ -276,8 +276,6 @@ def validate_customs_entry_for_submission(doc) -> list[LocalValidationIssue]:
 
 	if getattr(doc, 'importer_profile', None):
 		profile = frappe.get_cached_doc('Importer Profile', doc.importer_profile)
-		if profile.docstatus != 1 or not profile.lds_id:
-			issues.append(LocalValidationIssue('importer_profile', 'Importer Profile must be submitted to LDS before it can be used on a Customs Entry.'))
 		if not (profile.importer_code or profile.cbp_number or profile.irs_number):
 			issues.append(LocalValidationIssue('importer_profile', 'Importer Profile must have an importer code, CBP number, or IRS number.'))
 		if not profile.display_name:
@@ -291,9 +289,6 @@ def validate_customs_entry_for_submission(doc) -> list[LocalValidationIssue]:
 			issues.append(LocalValidationIssue('shipments', 'Each shipment row must have a Carrier Profile.'))
 			break
 		carrier = frappe.get_cached_doc('Carrier', row.carrier_profile)
-		if carrier.docstatus != 1 or not carrier.lds_id:
-			issues.append(LocalValidationIssue('shipments', 'Each shipment carrier must be submitted to LDS before it can be used on a Customs Entry.'))
-			break
 		if not (carrier.display_name or carrier.carrier_code):
 			issues.append(LocalValidationIssue('shipments', 'Each shipment carrier must have a display name or carrier code.'))
 			break
@@ -325,11 +320,11 @@ def build_submission_entity_xml(doc) -> str:
 	_set_text(entity, "Date", _as_datetime_text(doc.entry_date), None)
 	_set_text(entity, "TransportationMode", doc.transport_mode, DOCUMENTS_NS)
 	_set_text(entity, "BrokerReferenceNumber", broker_reference, DOCUMENTS_NS)
-	_set_text(entity, "SuretyCode", doc.bond_number, DOCUMENTS_NS)
+	_set_text(entity, "SuretyCode", getattr(doc, "surety_code", None) or doc.bond_number, DOCUMENTS_NS)
 	_set_text(entity, "ClientRef", doc.client_ref, DOCUMENTS_NS)
 	_set_entry_arrival_fields(entity, doc.shipments or [])
 	_set_port_of_entry(entity, doc.port_of_entry)
-	_set_port_of_unlading(entity, doc.port_of_entry)
+	_set_port_of_unlading(entity, getattr(doc, "port_of_unlading", None) or doc.port_of_entry)
 	_set_importer_from_profile(entity, doc.importer_profile)
 	_set_entry_carrier(entity, doc.shipments or [])
 	if getattr(doc, 'lds_id', None):
@@ -783,10 +778,18 @@ def _remove_child(parent: ET.Element, local_name: str) -> None:
 		parent.remove(existing)
 
 
+def _shipment_arrival_datetime_text(row) -> str | None:
+	return _as_datetime_text(
+		getattr(row, 'date_of_arrival', None)
+		or getattr(row, 'arrival_date', None)
+		or getattr(row, 'date_of_import', None)
+	)
+
+
 def _set_entry_arrival_fields(parent: ET.Element, shipments) -> None:
 	arrival = None
 	for row in shipments:
-		arrival = _as_datetime_text(getattr(row, 'arrival_date', None))
+		arrival = _shipment_arrival_datetime_text(row)
 		if arrival:
 			break
 	_set_text(parent, 'DateOfArrival', arrival, DOCUMENTS_NS)
@@ -811,20 +814,77 @@ def _set_port_of_entry(parent: ET.Element, port_code: str | None) -> None:
 	_set_text(parent, 'PortOfEntry_Id', port_id, DOCUMENTS_NS)
 
 
+def _resolve_runtime_importer(profile) -> dict[str, str | None]:
+	resolved = {
+		'lds_id': getattr(profile, 'lds_id', None),
+		'code': getattr(profile, 'importer_code', None) or getattr(profile, 'cbp_number', None) or getattr(profile, 'irs_number', None),
+		'name': getattr(profile, 'display_name', None),
+		'raw_payload_xml': getattr(profile, 'raw_payload_xml', None),
+	}
+	importer_code = getattr(profile, 'importer_code', None)
+	if not importer_code:
+		return resolved
+	client = get_client()
+	if not hasattr(client, 'fetch_importer_contact_by_code_xml'):
+		return resolved
+	try:
+		fetched_xml = client.fetch_importer_contact_by_code_xml(importer_code)
+		fetched = parse_importer_profile_xml(fetched_xml)
+	except (LDSClientError, ET.ParseError):
+		return resolved
+	if fetched:
+		resolved.update({
+			'lds_id': fetched.get('lds_id') or resolved.get('lds_id'),
+			'code': fetched.get('importer_code') or resolved.get('code'),
+			'name': fetched.get('display_name') or resolved.get('name'),
+			'raw_payload_xml': fetched.get('raw_payload_xml') or resolved.get('raw_payload_xml'),
+		})
+	return resolved
+
+
+def _resolve_runtime_carrier(carrier) -> dict[str, str | None]:
+	resolved = {
+		'lds_id': getattr(carrier, 'lds_id', None),
+		'code': getattr(carrier, 'carrier_code', None),
+		'name': getattr(carrier, 'display_name', None),
+		'raw_payload_xml': getattr(carrier, 'raw_payload_xml', None),
+	}
+	carrier_code = getattr(carrier, 'carrier_code', None)
+	if not carrier_code:
+		return resolved
+	client = get_client()
+	if not hasattr(client, 'fetch_carrier_by_code_xml'):
+		return resolved
+	try:
+		fetched_xml = client.fetch_carrier_by_code_xml(carrier_code)
+		fetched = parse_carrier_xml(fetched_xml)
+	except (LDSClientError, ET.ParseError):
+		return resolved
+	if fetched:
+		resolved.update({
+			'lds_id': fetched.get('lds_id') or resolved.get('lds_id'),
+			'code': fetched.get('carrier_code') or resolved.get('code'),
+			'name': fetched.get('display_name') or resolved.get('name'),
+			'raw_payload_xml': fetched.get('raw_payload_xml') or resolved.get('raw_payload_xml'),
+		})
+	return resolved
+
+
 def _set_importer_from_profile(parent: ET.Element, importer_profile_name: str | None) -> None:
 	if not importer_profile_name:
 		return
 	profile = frappe.get_cached_doc('Importer Profile', importer_profile_name)
+	resolved = _resolve_runtime_importer(profile)
 	importer = _build_directory_entity(
 		local_name='Importer',
-		raw_payload_xml=profile.raw_payload_xml,
-		lds_id=profile.lds_id,
-		code=profile.importer_code or profile.cbp_number or profile.irs_number,
-		name=profile.display_name,
+		raw_payload_xml=resolved.get('raw_payload_xml'),
+		lds_id=resolved.get('lds_id'),
+		code=resolved.get('code'),
+		name=resolved.get('name'),
 	)
 	if importer is not None:
 		_replace_child(parent, 'Importer', importer)
-	_set_text(parent, 'Importer_Id', getattr(profile, 'lds_id', None), DOCUMENTS_NS)
+	_set_text(parent, 'Importer_Id', resolved.get('lds_id'), DOCUMENTS_NS)
 
 
 def _set_shipments(parent: ET.Element, shipments, importer_profile_name: str | None = None, house_bill: str | None = None) -> None:
@@ -850,14 +910,15 @@ def _set_shipments(parent: ET.Element, shipments, importer_profile_name: str | N
 def _apply_shipment_row(shipment: ET.Element, row, importer_profile_name: str | None = None, house_bill: str | None = None) -> None:
 	_set_text(shipment, 'Number', getattr(row, 'shipment_no', None), DOCUMENTS_NS)
 	_set_text(shipment, 'TransportationMode', getattr(row, 'mode', None), DOCUMENTS_NS)
-	arrival = _as_datetime_text(getattr(row, 'arrival_date', None))
+	arrival = _shipment_arrival_datetime_text(row)
 	_set_text(shipment, 'DateOfImport', arrival, DOCUMENTS_NS)
 	_set_text(shipment, 'DateOfArrival', arrival, DOCUMENTS_NS)
 	_set_text(shipment, 'Direction', 'IM', DOCUMENTS_NS)
 	_set_text(shipment, 'HouseBillNumber', house_bill, DOCUMENTS_NS)
 	if importer_profile_name:
 		profile = frappe.get_cached_doc('Importer Profile', importer_profile_name)
-		importer_id = getattr(profile, 'lds_id', None)
+		resolved_importer = _resolve_runtime_importer(profile)
+		importer_id = resolved_importer.get('lds_id')
 		_set_text(shipment, 'Importer_Id', importer_id, DOCUMENTS_NS)
 		_set_text(shipment, 'Buyer_Id', importer_id, DOCUMENTS_NS)
 		_set_text(shipment, 'Consignee_Id', importer_id, DOCUMENTS_NS)
@@ -868,7 +929,8 @@ def _apply_shipment_row(shipment: ET.Element, row, importer_profile_name: str | 
 	_set_carrier_on_shipment(shipment, getattr(row, 'carrier_profile', None))
 	if house_bill and getattr(row, 'carrier_profile', None):
 		carrier = frappe.get_cached_doc('Carrier', row.carrier_profile)
-		_set_text(shipment, 'HouseBillIssuer_Id', getattr(carrier, 'lds_id', None), DOCUMENTS_NS)
+		resolved_carrier = _resolve_runtime_carrier(carrier)
+		_set_text(shipment, 'HouseBillIssuer_Id', resolved_carrier.get('lds_id'), DOCUMENTS_NS)
 	_reorder_children(shipment, SHIPMENT_FIELD_RANK)
 
 
@@ -879,7 +941,17 @@ def _set_carrier_on_shipment(shipment: ET.Element, carrier_profile_name: str | N
 	if not carrier_profile_name:
 		return
 	carrier = frappe.get_cached_doc('Carrier', carrier_profile_name)
-	_set_text(shipment, 'Carrier_Id', getattr(carrier, 'lds_id', None), DOCUMENTS_NS)
+	resolved = _resolve_runtime_carrier(carrier)
+	carrier_node = _build_directory_entity(
+		local_name='Carrier',
+		raw_payload_xml=resolved.get('raw_payload_xml'),
+		lds_id=resolved.get('lds_id'),
+		code=resolved.get('code'),
+		name=resolved.get('name'),
+	)
+	if carrier_node is not None:
+		_replace_child(shipment, 'Carrier', carrier_node)
+	_set_text(shipment, 'Carrier_Id', resolved.get('lds_id'), DOCUMENTS_NS)
 
 
 def _build_directory_entity(local_name: str, raw_payload_xml: str | None, lds_id: str | None, code: str | None, name: str | None) -> ET.Element | None:
@@ -926,9 +998,10 @@ def _set_entry_carrier(parent: ET.Element, shipments) -> None:
 		if not carrier_profile:
 			continue
 		carrier = frappe.get_cached_doc('Carrier', carrier_profile)
-		carrier_id = getattr(carrier, 'lds_id', None)
-		carrier_name = getattr(carrier, 'display_name', None)
-		carrier_raw_payload = getattr(carrier, 'raw_payload_xml', None)
+		resolved = _resolve_runtime_carrier(carrier)
+		carrier_id = resolved.get('lds_id')
+		carrier_name = resolved.get('name')
+		carrier_raw_payload = resolved.get('raw_payload_xml')
 		if carrier_id:
 			break
 	carrier = _build_directory_entity(
@@ -1044,11 +1117,14 @@ def create_draft_from_entry(source_name: str) -> str:
 	draft.entry_number = generate_draft_entry_number()
 	draft.lds_id = None
 	draft.status = "Draft"
+	draft.psc_status = None
 	draft.liquidation_status = None
 	draft.filing_date = None
+	draft.preliminary_statement_print_date = None
 	draft.release_date = None
 	draft.liquidation_date = None
 	draft.created_by = None
+	draft.creator_lds_id = None
 	draft.source_active = 0
 	draft.archived_on = None
 	draft.last_seen_in_source_on = None

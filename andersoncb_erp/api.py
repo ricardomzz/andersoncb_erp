@@ -1,6 +1,9 @@
 import frappe
 
+from andersoncb_erp.services.customs_port_directory import ensure_customs_port, search_customs_ports_local
+from andersoncb_erp.services.dotnet_possible_values import get_authoritative_possible_values
 from andersoncb_erp.services.party_submission import submit_carrier_to_lds, submit_importer_profile_to_lds
+from andersoncb_erp.services.purge import purge_lds_synced_data
 from andersoncb_erp.services.submission import create_draft_from_entry, submit_entry_to_lds
 from andersoncb_erp.services.sync import (
     refresh_customs_entry,
@@ -56,3 +59,24 @@ def repair_failed_draft(name: str):
             frappe.db.set_value(row.doctype, row.name, "docstatus", 0, update_modified=False)
     frappe.db.commit()
     return {"ok": True, "name": doc.name}
+
+
+@frappe.whitelist()
+def purge_lds_data():
+    return purge_lds_synced_data()
+
+@frappe.whitelist()
+def get_business_code_mappings():
+    return get_authoritative_possible_values()
+
+@frappe.whitelist()
+def search_customs_ports(doctype, txt, searchfield, start, page_len, filters=None):
+    rows = search_customs_ports_local(txt, page_len=int(page_len or 20))
+    if not rows and txt:
+        try:
+            ensure_customs_port(txt)
+        except Exception:
+            pass
+        rows = search_customs_ports_local(txt, page_len=int(page_len or 20))
+    return rows
+
