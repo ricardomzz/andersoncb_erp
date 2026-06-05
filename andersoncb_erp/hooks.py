@@ -7,13 +7,8 @@ app_license = "mit"
 
 doctype_js = {
     "LDS Settings": "public/js/lds_settings.js",
-    "Customs Entry": "public/js/customs_entry.js",
     "Importer Profile": "public/js/importer_profile.js",
     "Carrier": "public/js/carrier.js",
-}
-
-doctype_list_js = {
-    "Customs Entry": "public/js/customs_entry_list.js",
 }
 
 scheduler_events = {

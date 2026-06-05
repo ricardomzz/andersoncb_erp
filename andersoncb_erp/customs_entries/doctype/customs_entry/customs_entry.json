@@ -28,10 +28,7 @@
     "total_entered_value",
     "currency",
     "created_by",
-    "overview_section",
-    "overview_html",
     "parties_section",
-    "parties_html",
     "importer_number",
     "consignee_name",
     "broker_reference",
@@ -39,18 +36,19 @@
     "house_bill",
     "master_bill",
     "shipment_section",
-    "shipment_summary_html",
     "entry_type",
     "port_of_entry",
     "transport_mode",
+    "shipments",
     "commercial_section",
-    "commercial_summary_html",
+    "invoices",
+    "fees",
     "classification_section",
-    "classification_summary_html",
+    "tariff_lines",
     "timeline_section",
-    "timeline_summary_html",
+    "events",
+    "references",
     "system_section",
-    "system_summary_html",
     "lds_id",
     "last_lds_submission_on",
     "lds_submission_errors",
@@ -59,20 +57,7 @@
     "last_seen_in_source_on",
     "last_synced_on",
     "lds_last_submission_payload",
-    "raw_payload_xml",
-    "raw_tables_section",
-    "raw_shipments_section",
-    "shipments",
-    "raw_invoices_section",
-    "invoices",
-    "raw_fees_section",
-    "fees",
-    "raw_tariffs_section",
-    "tariff_lines",
-    "raw_events_section",
-    "events",
-    "raw_references_section",
-    "references"
+    "raw_payload_xml"
   ],
   "fields": [
     {
@@ -182,24 +167,9 @@
       "in_list_view": 1
     },
     {
-      "fieldname": "overview_section",
-      "fieldtype": "Section Break",
-      "label": "Overview"
-    },
-    {
-      "fieldname": "overview_html",
-      "fieldtype": "HTML",
-      "label": "Overview Summary"
-    },
-    {
       "fieldname": "parties_section",
       "fieldtype": "Section Break",
       "label": "Parties & References"
-    },
-    {
-      "fieldname": "parties_html",
-      "fieldtype": "HTML",
-      "label": "Parties Summary"
     },
     {
       "fieldname": "importer_number",
@@ -238,11 +208,6 @@
       "label": "Shipment & Logistics"
     },
     {
-      "fieldname": "shipment_summary_html",
-      "fieldtype": "HTML",
-      "label": "Shipment Summary"
-    },
-    {
       "fieldname": "entry_type",
       "fieldtype": "Data",
       "label": "Entry Type",
@@ -265,19 +230,9 @@
       "label": "Commercial"
     },
     {
-      "fieldname": "commercial_summary_html",
-      "fieldtype": "HTML",
-      "label": "Commercial Summary"
-    },
-    {
       "fieldname": "classification_section",
       "fieldtype": "Section Break",
       "label": "Classification"
-    },
-    {
-      "fieldname": "classification_summary_html",
-      "fieldtype": "HTML",
-      "label": "Classification Summary"
     },
     {
       "fieldname": "timeline_section",
@@ -285,21 +240,11 @@
       "label": "Timeline"
     },
     {
-      "fieldname": "timeline_summary_html",
-      "fieldtype": "HTML",
-      "label": "Timeline Summary"
-    },
-    {
       "fieldname": "system_section",
       "fieldtype": "Section Break",
       "label": "System / LDS",
       "collapsible": 1,
       "collapsed": 1
-    },
-    {
-      "fieldname": "system_summary_html",
-      "fieldtype": "HTML",
-      "label": "System Summary"
     },
     {
       "fieldname": "lds_id",
@@ -364,31 +309,10 @@
       "read_only": 1
     },
     {
-      "fieldname": "raw_tables_section",
-      "fieldtype": "Section Break",
-      "label": "Raw Tables",
-      "collapsible": 1,
-      "collapsed": 1
-    },
-    {
-      "fieldname": "raw_shipments_section",
-      "fieldtype": "Section Break",
-      "label": "Raw Shipments",
-      "collapsible": 1,
-      "collapsed": 1
-    },
-    {
       "fieldname": "shipments",
       "fieldtype": "Table",
       "label": "Shipments",
       "options": "Entry Shipment"
-    },
-    {
-      "fieldname": "raw_invoices_section",
-      "fieldtype": "Section Break",
-      "label": "Raw Invoices",
-      "collapsible": 1,
-      "collapsed": 1
     },
     {
       "fieldname": "invoices",
@@ -397,24 +321,10 @@
       "options": "Entry Invoice"
     },
     {
-      "fieldname": "raw_fees_section",
-      "fieldtype": "Section Break",
-      "label": "Raw Fees",
-      "collapsible": 1,
-      "collapsed": 1
-    },
-    {
       "fieldname": "fees",
       "fieldtype": "Table",
       "label": "Fees",
       "options": "Entry Fee"
-    },
-    {
-      "fieldname": "raw_tariffs_section",
-      "fieldtype": "Section Break",
-      "label": "Raw Tariff Lines",
-      "collapsible": 1,
-      "collapsed": 1
     },
     {
       "fieldname": "tariff_lines",
@@ -423,24 +333,10 @@
       "options": "Entry Tariff Line"
     },
     {
-      "fieldname": "raw_events_section",
-      "fieldtype": "Section Break",
-      "label": "Raw Events",
-      "collapsible": 1,
-      "collapsed": 1
-    },
-    {
       "fieldname": "events",
       "fieldtype": "Table",
       "label": "Events",
       "options": "Entry Event"
-    },
-    {
-      "fieldname": "raw_references_section",
-      "fieldtype": "Section Break",
-      "label": "Raw References",
-      "collapsible": 1,
-      "collapsed": 1
     },
     {
       "fieldname": "references",
