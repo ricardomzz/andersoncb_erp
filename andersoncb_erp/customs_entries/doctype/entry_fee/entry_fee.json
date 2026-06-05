@@ -28,7 +28,8 @@
       "fieldname": "amount",
       "fieldtype": "Float",
       "label": "Amount",
-      "precision": "2"
+      "precision": "2",
+      "in_list_view": 1
     },
     {
       "fieldname": "currency",
@@ -43,7 +44,8 @@
     {
       "fieldname": "shipment_no",
       "fieldtype": "Data",
-      "label": "Shipment No"
+      "label": "Shipment No",
+      "in_list_view": 1
     },
     {
       "fieldname": "invoice_number",
@@ -53,7 +55,8 @@
     {
       "fieldname": "article_line_no",
       "fieldtype": "Data",
-      "label": "Article Line No"
+      "label": "Article Line No",
+      "in_list_view": 1
     }
   ],
   "permissions": []

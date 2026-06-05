@@ -31,7 +31,8 @@
     {
       "fieldname": "article_line_no",
       "fieldtype": "Data",
-      "label": "Article Line No"
+      "label": "Article Line No",
+      "in_list_view": 1
     },
     {
       "fieldname": "shipment_no",
@@ -41,7 +42,8 @@
     {
       "fieldname": "invoice_number",
       "fieldtype": "Data",
-      "label": "Invoice Number"
+      "label": "Invoice Number",
+      "in_list_view": 1
     },
     {
       "fieldname": "hs_code",
