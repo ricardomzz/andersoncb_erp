@@ -52,12 +52,15 @@
     "shipments",
     "commercial_section",
     "invoices",
+    "articles_section",
     "articles",
+    "fees_section",
     "fees",
     "classification_section",
     "tariff_lines",
     "timeline_section",
     "events",
+    "references_section",
     "references",
     "system_section",
     "lds_id",
@@ -308,7 +311,8 @@
     {
       "fieldname": "timeline_section",
       "fieldtype": "Section Break",
-      "label": "Timeline"
+      "label": "Events",
+      "depends_on": "eval:doc.events && doc.events.length"
     },
     {
       "fieldname": "system_section",
@@ -434,6 +438,22 @@
       "fieldtype": "Table",
       "label": "References",
       "options": "Entry Reference"
+    },
+    {
+      "fieldname": "articles_section",
+      "fieldtype": "Section Break",
+      "label": "Articles"
+    },
+    {
+      "fieldname": "fees_section",
+      "fieldtype": "Section Break",
+      "label": "Fees"
+    },
+    {
+      "fieldname": "references_section",
+      "fieldtype": "Section Break",
+      "label": "References",
+      "depends_on": "eval:doc.references && doc.references.length"
     }
   ],
   "permissions": [
