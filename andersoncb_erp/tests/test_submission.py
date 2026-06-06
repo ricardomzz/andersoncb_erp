@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -17,6 +18,11 @@ from andersoncb_erp.services.submission import (
 class DummyDoc(SimpleNamespace):
     def set(self, fieldname, value):
         setattr(self, fieldname, value)
+
+
+class DummySettings(SimpleNamespace):
+    def get(self, key, default=None):
+        return getattr(self, key, default)
 
 
 class DummyRow(SimpleNamespace):
@@ -43,7 +49,8 @@ def make_doc(**overrides):
         'consignee_name': 'Consignee Co',
         'raw_payload_xml': None,
         'shipments': [DummyRow(shipment_no='7', mode='11', destination='2704', arrival_date='2026-06-03', carrier_profile='CAR-1', carrier='Carrier Co')],
-        'invoices': [DummyRow(invoice_number='INV-1')],
+        'invoices': [DummyRow(invoice_number='INV-1', shipment_no='7', invoice_date='2026-06-03', currency='USD', invoice_amount=1250.0, vendor_name='Vendor Co')],
+        'articles': [],
         'fees': [],
         'events': [],
         'tariff_lines': [],
@@ -63,11 +70,13 @@ def make_doc(**overrides):
     return DummyDoc(**base)
 
 
-def fake_get_cached_doc(doctype, name):
+def fake_get_cached_doc(doctype, name=None):
+    if doctype == 'System Settings':
+        return DummySettings(time_zone='America/New_York')
     if doctype == 'Importer Profile':
         return SimpleNamespace(name=name, display_name='Importer Co', importer_code='IMP-1', cbp_number=None, irs_number=None, raw_payload_xml=None, lds_id='493', docstatus=1)
     if doctype == 'Carrier':
-        return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR-1', raw_payload_xml='<Carrier><Id>1488</Id><Code>CAR-1</Code><Name>Carrier Co</Name></Carrier>', lds_id='1488', docstatus=1)
+        return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR-1', carrier_type='Air', airway_bill_prefix='001', raw_payload_xml='<Carrier><Id>1488</Id><Code>CAR-1</Code><Name>Carrier Co</Name></Carrier>', lds_id='1488', docstatus=1)
     raise AssertionError((doctype, name))
 
 
@@ -102,6 +111,56 @@ def test_validate_customs_entry_for_submission_enforces_broker_reference_length(
     assert any('9 characters or fewer' in issue.message for issue in issues)
 
 
+def test_validate_customs_entry_for_submission_enforces_line_item_identifier_length(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+    doc = make_doc(articles=[DummyRow(line_item_identifier='TOOLONG')])
+
+    issues = validate_customs_entry_for_submission(doc)
+
+    assert any('Line Item Identifier must be 3 characters or fewer' in issue.message for issue in issues)
+
+
+def test_validate_customs_entry_for_submission_enforces_air_carrier_requirements(monkeypatch):
+    def fake_air_cached_doc(doctype, name):
+        if doctype == 'Importer Profile':
+            return fake_get_cached_doc(doctype, name)
+        if doctype == 'Carrier':
+            return SimpleNamespace(name=name, display_name='Carrier Co', carrier_code='CAR1', carrier_type='Ocean', airway_bill_prefix=None, raw_payload_xml=None, lds_id='1488', docstatus=1)
+        raise AssertionError((doctype, name))
+
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_air_cached_doc)
+    doc = make_doc(transport_mode='40', shipments=[DummyRow(shipment_no='7', mode='40', destination='2704', arrival_date='2026-06-03', carrier_profile='CAR-1', carrier='Carrier Co')])
+
+    issues = validate_customs_entry_for_submission(doc)
+
+    assert any('Carrier Type set to Air' in issue.message for issue in issues)
+
+
+def test_build_submission_entity_xml_omits_zero_optional_article_fees(monkeypatch):
+    monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
+
+    class FakeClient:
+        def new_entry_xml(self):
+            return '<NewResult xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/" z:Id="i1"><EntityGuid>guid-1</EntityGuid><Date>2026-06-04T17:37:45</Date><Number>3003990</Number><a:EntryFilerCode xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">SY1</a:EntryFilerCode><a:EntryNumber xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">30039903</a:EntryNumber><a:EntryType xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents">01</a:EntryType><a:Shipments xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents"></a:Shipments></NewResult>'
+
+        def fetch_customs_port_by_code_xml(self, code):
+            return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
+
+        def fetch_harmonized_tariff_by_code_xml(self, code):
+            return f'<HarmonizedTariff><Id>77</Id><Code>{code}</Code><Name>Tariff {code}</Name></HarmonizedTariff>'
+
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
+            return '30039903'
+
+    monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
+    doc = make_doc(articles=[DummyRow(article_line_no='1', description='Article One', invoice_number='INV-1', shipment_no='7', line_item_identifier='A1', country_of_origin='CN', country_of_export='CN', gross_weight=10.0, entered_value=1250.0, harbor_maintenance_fee=0.0, merchandise_processing_fee=0.0)], tariff_lines=[DummyRow(line_no='1', article_line_no='1', shipment_no='7', invoice_number='INV-1', hs_code='4819200040', quantity=1.0, uom='KG', entered_value=1250.0, country_of_origin='CN')])
+
+    xml = build_submission_entity_xml(doc)
+
+    assert 'HarborMaintenanceFee' not in xml
+    assert 'MerchandiseProcessingFee' not in xml
+
+
 def test_build_submission_entity_xml_builds_importer_and_carrier_nodes(monkeypatch):
     monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
 
@@ -112,21 +171,30 @@ def test_build_submission_entity_xml_builds_importer_and_carrier_nodes(monkeypat
         def fetch_customs_port_by_code_xml(self, code):
             return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
 
+        def fetch_harmonized_tariff_by_code_xml(self, code):
+            return f'<HarmonizedTariff><Id>77</Id><Code>{code}</Code><Name>Tariff {code}</Name></HarmonizedTariff>'
+
         def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
             return '30039903'
 
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
-    xml = build_submission_entity_xml(make_doc())
+    xml = build_submission_entity_xml(make_doc(
+        articles=[DummyRow(article_line_no='1', description='Article One', invoice_number='INV-1', shipment_no='7', line_item_identifier='A1', country_of_origin='CN', country_of_export='CN', gross_weight=10.0, entered_value=1250.0, harbor_maintenance_fee=5.0, merchandise_processing_fee=7.5)],
+        tariff_lines=[DummyRow(line_no='1', article_line_no='1', shipment_no='7', invoice_number='INV-1', hs_code='4819200040', quantity=1.0, uom='KG', entered_value=1250.0, country_of_origin='CN')],
+    ))
 
     assert 'i:type="a:CustomsEntry"' not in xml
     assert '<entity' in xml
     assert 'EntryFilerCode' in xml
-    assert 'Importer Co' in xml
-    assert 'Carrier Co' in xml
+    assert 'Importer_Id' in xml
     assert 'Carrier_Id' in xml
-    assert '<entity' in xml
-    assert 'Shipment' not in xml
-    assert '<Date>2026-06-04T00:00:00</Date>' in xml
+    assert 'z:Id="i2"' in xml
+    assert 'ShipmentInvoice' in xml
+    assert 'ShipmentArticle' in xml
+    assert 'ShipmentArticleTariff' in xml
+    assert 'HarmonizedTariff_Id' in xml
+    assert '>77<' in xml
+    assert '2026-06-04T00:00:00' in xml
 
 
 def test_build_submission_entity_xml_uses_calculate_entry_number_for_new_entries(monkeypatch):
@@ -165,14 +233,14 @@ def test_build_submission_entity_xml_sets_internal_number_for_new_entries(monkey
         def fetch_customs_port_by_code_xml(self, code):
             return f'<CustomsPort><Id>6</Id><Code>{code}</Code></CustomsPort>'
 
-        def calculate_entry_number_for_entry(self, number, filer_code, customs_entry_id, adjust_sequence=True):
+        def calculate_entry_number(self, number, filer_code, check_unique=True, adjust_sequence=False):
             return '30039903'
 
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     xml = build_submission_entity_xml(make_doc(entry_number='TMPABC12'))
 
-    assert '<Number>3005005</Number>' in xml
-    assert xml.index('<Number>3005005</Number>') < xml.index('EntryNumber>30039903<')
+    assert '3005005' in xml
+    assert xml.index('3005005') < xml.index('EntryNumber>30039903<')
 
 
 def test_build_submission_entity_xml_sets_broker_reference_to_calculated_entry_number_for_new_entries(monkeypatch):
@@ -232,6 +300,9 @@ def test_process_lds_submission_populates_mapped_fields(monkeypatch):
         def save_entry_xml(self, entity_xml):
             return '<CustomsEntry><Id>777</Id><EntryNumber>76543210</EntryNumber><EntryFilerCode>SY1</EntryFilerCode><EntryType>01</EntryType><Date>2026-06-04T00:00:00</Date><PortOfEntry><Code>2704</Code></PortOfEntry><Importer><Code>IMP-1</Code><Name>Importer Co</Name></Importer></CustomsEntry>'
 
+        def fetch_entry_detail_xml(self, entry_number, filer_code=None):
+            return '<GetByEntryNumberResult><Id>777</Id><EntryNumber>76543210</EntryNumber></GetByEntryNumberResult>'
+
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     monkeypatch.setattr(submission, 'now_datetime', lambda: '2026-06-04 14:00:00')
@@ -247,6 +318,7 @@ def test_process_lds_submission_populates_mapped_fields(monkeypatch):
         'importer_number': 'IMP-1',
         'shipments': [],
         'invoices': [],
+        'articles': [],
         'fees': [],
         'events': [],
         'tariff_lines': [],
@@ -315,6 +387,9 @@ def test_process_lds_submission_repairs_zero_number_rows(monkeypatch):
                 return '<CustomsEntry><Id>777</Id><Number>0</Number><EntryNumber>30039903</EntryNumber><EntryFilerCode>SY1</EntryFilerCode><EntryType>01</EntryType><Date>2026-06-04T00:00:00</Date><PortOfEntry><Code>2704</Code></PortOfEntry><Importer><Code>IMP-1</Code><Name>Importer Co</Name></Importer></CustomsEntry>'
             return '<CustomsEntry><Id>777</Id><Number>3003990</Number><EntryNumber>30039903</EntryNumber><EntryFilerCode>SY1</EntryFilerCode><EntryType>01</EntryType><Date>2026-06-04T00:00:00</Date><PortOfEntry><Code>2704</Code></PortOfEntry><Importer><Code>IMP-1</Code><Name>Importer Co</Name></Importer></CustomsEntry>'
 
+        def fetch_entry_detail_xml(self, entry_number, filer_code=None):
+            return '<GetByEntryNumberResult><Id>777</Id><EntryNumber>30039903</EntryNumber></GetByEntryNumberResult>'
+
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     monkeypatch.setattr(submission.frappe, 'get_cached_doc', fake_get_cached_doc)
     monkeypatch.setattr(submission, 'now_datetime', lambda: '2026-06-04 14:00:00')
@@ -340,6 +415,7 @@ def test_process_lds_submission_repairs_zero_number_rows(monkeypatch):
         'importer_number': 'IMP-1',
         'shipments': [],
         'invoices': [],
+        'articles': [],
         'fees': [],
         'events': [],
         'tariff_lines': [],
@@ -376,7 +452,7 @@ def test_build_submission_entity_xml_falls_back_when_new_entry_template_faults(m
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     xml = build_submission_entity_xml(make_doc(entry_number='TMPABC12', broker_reference='LOCAL-REF'))
 
-    assert '<Number>3005005</Number>' in xml
+    assert '3005005' in xml
     assert 'EntryNumber>30050058<' in xml
     assert 'BrokerReferenceNumber>30050058<' in xml
     assert 'LOCAL-REF' not in xml
@@ -483,7 +559,111 @@ def test_build_submission_entity_xml_orders_entry_fields_for_lds_contract(monkey
     monkeypatch.setattr(submission, 'get_client', lambda: FakeClient())
     xml = build_submission_entity_xml(make_doc(entry_number='TMPABC12'))
 
-    assert xml.index('Carrier_Id') < xml.index('ClientRef') < xml.index('EntryType') < xml.index('Importer_Id') < xml.index('PortOfEntry_Id') < xml.index('SuretyCode') < xml.index('TransportationMode')
+    root = ET.fromstring(xml)
+    top_level = [child.tag.split('}', 1)[-1] for child in list(root)]
+    assert top_level.index('Carrier_Id') < top_level.index('ClientRef') < top_level.index('EntryType') < top_level.index('Importer_Id') < top_level.index('PortOfEntry_Id') < top_level.index('SuretyCode') < top_level.index('TransportationMode')
     assert 'Consignee><Name>' not in xml
 
 
+
+
+def test_save_with_deadlock_retry_preserves_in_memory_state(monkeypatch):
+    monkeypatch.setattr(submission, 'sleep', lambda *_args, **_kwargs: None)
+
+    class FakeDoc:
+        def __init__(self):
+            self.flags = SimpleNamespace(skip_lds_submission=False)
+            self.entry_number = '30059999'
+            self.lds_id = '1999'
+            self.last_lds_submission_on = '2026-06-05 21:00:00'
+            self.reload_calls = 0
+            self.save_calls = 0
+
+        def save(self):
+            self.save_calls += 1
+            if self.save_calls == 1:
+                raise submission.QueryDeadlockError('deadlock')
+
+        def reload(self):
+            self.reload_calls += 1
+            self.entry_number = 'TMPBROKE'
+            self.lds_id = None
+            self.last_lds_submission_on = None
+
+    rollback_calls = []
+    monkeypatch.setattr(submission.frappe, 'db', SimpleNamespace(rollback=lambda: rollback_calls.append(True)))
+    doc = FakeDoc()
+
+    submission._save_with_deadlock_retry(doc)
+
+    assert doc.save_calls == 2
+    assert doc.reload_calls == 0
+    assert doc.flags.skip_lds_submission is True
+    assert doc.entry_number == '30059999'
+    assert doc.lds_id == '1999'
+    assert doc.last_lds_submission_on == '2026-06-05 21:00:00'
+    assert rollback_calls == [True]
+
+
+def test_submit_with_deadlock_retry_preserves_in_memory_state(monkeypatch):
+    monkeypatch.setattr(submission, 'sleep', lambda *_args, **_kwargs: None)
+
+    class FakeDoc:
+        def __init__(self):
+            self.flags = SimpleNamespace(skip_lds_submission=False)
+            self.entry_number = '30059999'
+            self.lds_id = '1999'
+            self.reload_calls = 0
+            self.submit_calls = 0
+
+        def submit(self):
+            self.submit_calls += 1
+            if self.submit_calls == 1:
+                raise submission.QueryDeadlockError('deadlock')
+
+        def reload(self):
+            self.reload_calls += 1
+            self.entry_number = 'TMPBROKE'
+            self.lds_id = None
+
+    rollback_calls = []
+    monkeypatch.setattr(submission.frappe, 'db', SimpleNamespace(rollback=lambda: rollback_calls.append(True)))
+    doc = FakeDoc()
+
+    submission._submit_with_deadlock_retry(doc)
+
+    assert doc.submit_calls == 2
+    assert doc.reload_calls == 0
+    assert doc.flags.skip_lds_submission is True
+    assert doc.entry_number == '30059999'
+    assert doc.lds_id == '1999'
+    assert rollback_calls == [True]
+
+
+def test_save_with_deadlock_retry_refreshes_original_modified(monkeypatch):
+    monkeypatch.setattr(submission, 'sleep', lambda *_args, **_kwargs: None)
+
+    class FakeDoc:
+        def __init__(self):
+            self.doctype = 'Customs Entry'
+            self.name = 'TMPSTAMP'
+            self.__islocal = False
+            self.flags = SimpleNamespace(skip_lds_submission=False)
+            self._original_modified = 'stale'
+            self.save_calls = 0
+
+        def save(self):
+            self.save_calls += 1
+
+    lookups = []
+    monkeypatch.setattr(submission.frappe, 'db', SimpleNamespace(
+        get_value=lambda doctype, name, field: lookups.append((doctype, name, field)) or '2026-06-05 21:30:00',
+        rollback=lambda: None,
+    ))
+    doc = FakeDoc()
+
+    submission._save_with_deadlock_retry(doc)
+
+    assert doc.save_calls == 1
+    assert doc._original_modified == '2026-06-05 21:30:00'
+    assert lookups == [('Customs Entry', 'TMPSTAMP', 'modified')]

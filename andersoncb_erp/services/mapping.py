@@ -28,8 +28,8 @@ def parse_entry_xml(entry_xml: str) -> dict[str, Any]:
 		'status': child_text(root, 'Status', ref_index=ref_index) or child_text(root, 'EntryStatus', ref_index=ref_index),
 		'psc_flag': to_bool(find_text(root, 'PostSummaryCorrection', ref_index=ref_index)),
 		'psc_accelerated_liquidation_flag': to_bool(find_text(root, 'PostSummaryCorrectionAcceleratedLiquidation', ref_index=ref_index)),
-		'port_of_entry': first_nested_text(root, [('PortOfEntry', 'Code')], ref_index=ref_index),
-		'port_of_unlading': first_nested_text(root, [('PortOfUnlading', 'Code')], ref_index=ref_index),
+		'port_of_entry': referenced_child_text(root, 'PortOfEntry', 'Code', ref_index=ref_index) or first_nested_text(root, [('PortOfEntry', 'Code')], ref_index=ref_index),
+		'port_of_unlading': referenced_child_text(root, 'PortOfUnlading', 'Code', ref_index=ref_index) or first_nested_text(root, [('PortOfUnlading', 'Code')], ref_index=ref_index),
 		'transport_mode': child_text(root, 'TransportationMode', ref_index=ref_index),
 		'conveyance_name': child_text(root, 'ConveyanceName', ref_index=ref_index),
 		'trip_identifier': child_text(root, 'TripIdentifier', ref_index=ref_index),
@@ -200,6 +200,17 @@ def first_nested_text(element: ET.Element, paths: list[tuple[str, ...]], ref_ind
 	return None
 
 
+def referenced_child_text(element: ET.Element, child_name: str, target_name: str, ref_index: dict[str, ET.Element] | None = None) -> str | None:
+	for child in list(element):
+		if localname(child.tag) != child_name:
+			continue
+		resolved = resolve_element(child, ref_index)
+		value = child_text(resolved, target_name, ref_index=ref_index) or find_text(resolved, target_name, ref_index=ref_index)
+		if value:
+			return value
+	return None
+
+
 def descendants(element: ET.Element, tag_name: str, ref_index: dict[str, ET.Element] | None = None) -> list[ET.Element]:
 	items = []
 	for child in element.iter():
@@ -272,8 +283,8 @@ def map_shipments(root: ET.Element, ref_index: dict[str, ET.Element]) -> list[di
 	rows = []
 	for shipment in collection_children(root, 'Shipments', 'Shipment', ref_index=ref_index):
 		carrier_data = extract_carrier_profile_data(shipment, ref_index)
-		shipment_port_of_entry = first_nested_text(shipment, [('PortOfEntry', 'Code')], ref_index=ref_index) or first_nested_text(root, [('PortOfEntry', 'Code')], ref_index=ref_index)
-		shipment_port_of_unlading = first_nested_text(shipment, [('PortOfUnlading', 'Code')], ref_index=ref_index) or first_nested_text(root, [('PortOfUnlading', 'Code')], ref_index=ref_index)
+		shipment_port_of_entry = referenced_child_text(shipment, 'PortOfEntry', 'Code', ref_index=ref_index) or first_nested_text(shipment, [('PortOfEntry', 'Code')], ref_index=ref_index) or referenced_child_text(root, 'PortOfEntry', 'Code', ref_index=ref_index) or first_nested_text(root, [('PortOfEntry', 'Code')], ref_index=ref_index)
+		shipment_port_of_unlading = referenced_child_text(shipment, 'PortOfUnlading', 'Code', ref_index=ref_index) or first_nested_text(shipment, [('PortOfUnlading', 'Code')], ref_index=ref_index) or referenced_child_text(root, 'PortOfUnlading', 'Code', ref_index=ref_index) or first_nested_text(root, [('PortOfUnlading', 'Code')], ref_index=ref_index)
 		date_of_arrival = to_date_string(child_text(shipment, 'ArrivalDate', ref_index=ref_index) or child_text(shipment, 'DateOfArrival', ref_index=ref_index))
 		date_of_import = to_date_string(child_text(shipment, 'DateOfImport', ref_index=ref_index))
 		date_of_export = to_date_string(child_text(shipment, 'DateOfExport', ref_index=ref_index))

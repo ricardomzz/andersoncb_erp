@@ -5,6 +5,8 @@ from andersoncb_erp.services.dotnet_possible_values import get_authoritative_pos
 from andersoncb_erp.services.party_submission import submit_carrier_to_lds, submit_importer_profile_to_lds
 from andersoncb_erp.services.purge import purge_lds_synced_data
 from andersoncb_erp.services.submission import create_draft_from_entry, submit_entry_to_lds
+from andersoncb_erp.services.verification import verify_customs_entry_roundtrip
+from andersoncb_erp.services.ui_test_case_catalog import get_test_case, load_execution_prep_snapshot, load_test_case_catalog
 from andersoncb_erp.services.sync import (
     refresh_customs_entry,
     run_initial_full_sync,
@@ -80,3 +82,23 @@ def search_customs_ports(doctype, txt, searchfield, start, page_len, filters=Non
         rows = search_customs_ports_local(txt, page_len=int(page_len or 20))
     return rows
 
+
+
+@frappe.whitelist()
+def verify_entry_roundtrip(name: str):
+    return verify_customs_entry_roundtrip(name)
+
+
+@frappe.whitelist()
+def get_customs_entry_test_cases():
+    return load_test_case_catalog()
+
+
+@frappe.whitelist()
+def get_customs_entry_test_case(case_id: str):
+    return get_test_case(case_id)
+
+
+@frappe.whitelist()
+def get_customs_entry_execution_prep():
+    return load_execution_prep_snapshot()

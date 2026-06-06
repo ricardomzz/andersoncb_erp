@@ -143,6 +143,14 @@ class LDSClient:
             code=code,
         )
 
+    def fetch_harmonized_tariff_by_code_xml(self, code: str) -> str:
+        return self._fetch_directory_entity_by_code_xml(
+            manager_name='HarmonizedTariffManager',
+            soap_action_interface_name='IEntityManagerDirectoryOf_HarmonizedTariff',
+            entity_local_names=('HarmonizedTariff', 'GetByCodeResult'),
+            code=code,
+        )
+
     def fetch_entry_detail_xml(self, entry_number: str, filer_code: str | None = None) -> str:
         filer_code = filer_code or self.filer_code
         if not filer_code:

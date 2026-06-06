@@ -142,3 +142,23 @@ def test_set_customs_entry_ready_status_uses_documented_request_shape(monkeypatc
     assert captured['soap_action'] == 'http://tempuri.org/ICustomsEntryManager/SetDocumentReadyStatus'
     assert '<id>1670</id>' in captured['body']
     assert '<ready>true</ready>' in captured['body']
+
+
+def test_fetch_harmonized_tariff_by_code_uses_directory_contract(monkeypatch):
+    client = LDSClient(endpoint_url='https://example.test/BrokerService', username='user', password='pass')
+    captured = {}
+
+    def fake_request(manager_name, soap_action, body):
+        captured['manager_name'] = manager_name
+        captured['soap_action'] = soap_action
+        captured['body'] = body
+        return parse_soap_body('<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetByCodeResponse xmlns="http://tempuri.org/"><GetByCodeResult><Code xmlns="">9403409060</Code><Name xmlns="">CABINETS</Name></GetByCodeResult></GetByCodeResponse></soap:Body></soap:Envelope>')
+
+    monkeypatch.setattr(client, '_request_manager_xml', fake_request)
+
+    xml = client.fetch_harmonized_tariff_by_code_xml('9403409060')
+
+    assert '<Code>9403409060</Code>' in xml
+    assert captured['manager_name'] == 'HarmonizedTariffManager'
+    assert captured['soap_action'] == 'http://tempuri.org/IEntityManagerDirectoryOf_HarmonizedTariff/GetByCode'
+    assert '<code>9403409060</code>' in captured['body']
