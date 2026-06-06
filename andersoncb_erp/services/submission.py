@@ -24,6 +24,7 @@ from andersoncb_erp.services.sync import (
 	CHILD_TABLE_FIELDS as SYNC_CHILD_TABLE_FIELDS,
 	derive_entry_status,
 	derive_liquidation_status,
+	derive_psc_status,
 	get_client,
 )
 
@@ -544,6 +545,7 @@ def process_lds_submission(doc) -> None:
 
 	mapped = resolve_master_links(parse_entry_xml(saved_xml), synced_on=now_datetime(), create_missing=False)
 	mapped["status"] = derive_entry_status(mapped, source_active=1)
+	mapped["psc_status"] = derive_psc_status(mapped)
 	mapped["liquidation_status"] = derive_liquidation_status(mapped)
 	resolved_entry_number = str(mapped.get('entry_number') or '').strip()
 	if not mapped.get('lds_id') or not resolved_entry_number.isdigit() or len(resolved_entry_number) != 8:

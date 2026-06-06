@@ -5,8 +5,7 @@ from typing import Any
 import frappe
 
 from andersoncb_erp.services.mapping import parse_entry_xml
-from andersoncb_erp.services.master_data import resolve_master_links
-from andersoncb_erp.services.sync import get_client
+from andersoncb_erp.services.sync import derive_entry_status, derive_liquidation_status, derive_psc_status, get_client
 
 HEADER_FIELDS = (
     "entry_number",
@@ -15,6 +14,11 @@ HEADER_FIELDS = (
     "client_ref",
     "entry_date",
     "estimated_entry_date",
+    "filing_date",
+    "preliminary_statement_print_date",
+    "release_date",
+    "liquidation_date",
+    "arrival_date",
     "port_of_entry",
     "port_of_unlading",
     "transport_mode",
@@ -28,11 +32,22 @@ HEADER_FIELDS = (
     "master_bill",
     "importer_name",
     "importer_number",
+    "consignee_name",
+    "broker_reference",
+    "total_entered_value",
+    "currency",
+)
+
+STATUS_FIELDS = (
+    "status",
+    "psc_status",
+    "liquidation_status",
 )
 
 SHIPMENT_FIELDS = (
     "shipment_no",
     "mode",
+    "voyage_or_flight",
     "port_of_entry",
     "port_of_unlading",
     "date_of_arrival",
@@ -57,10 +72,22 @@ ARTICLE_FIELDS = (
     "line_item_identifier",
     "country_of_origin",
     "country_of_export",
+    "manufacturer_lds_id",
+    "related_party_indicator",
     "gross_weight",
     "entered_value",
     "harbor_maintenance_fee",
     "merchandise_processing_fee",
+)
+
+FEE_FIELDS = (
+    "fee_type",
+    "amount",
+    "currency",
+    "description",
+    "shipment_no",
+    "invoice_number",
+    "article_line_no",
 )
 
 TARIFF_FIELDS = (
@@ -77,6 +104,15 @@ TARIFF_FIELDS = (
     "country_of_origin",
 )
 
+MONEY_EQUIVALENT_FIELDS = (
+    "entered_value",
+    "duty_amount",
+    "harbor_maintenance_fee",
+    "merchandise_processing_fee",
+    "total_entered_value",
+    "amount",
+)
+
 
 def verify_customs_entry_roundtrip(name: str) -> dict[str, Any]:
     doc = frappe.get_doc("Customs Entry", name)
@@ -90,6 +126,7 @@ def verify_customs_entry_roundtrip(name: str) -> dict[str, Any]:
         entry_xml = client.fetch_entry_detail_xml(doc.entry_number, doc.filer_code)
 
     lds_mapped = parse_entry_xml(entry_xml)
+    lds_mapped["raw_payload_xml"] = entry_xml
     expected = build_erp_snapshot(doc)
     actual = build_mapped_snapshot(lds_mapped)
     differences = compare_snapshots(expected, actual)
@@ -105,44 +142,65 @@ def verify_customs_entry_roundtrip(name: str) -> dict[str, Any]:
     }
 
 
+
 def build_erp_snapshot(doc) -> dict[str, Any]:
     return {
         "header": {field: normalize_value(get_value(doc, field)) for field in HEADER_FIELDS},
+        "status": {field: normalize_value(get_value(doc, field)) for field in STATUS_FIELDS},
         "shipments": sorted_rows([normalize_row(row, SHIPMENT_FIELDS) for row in (doc.get("shipments") or [])], shipment_key),
         "invoices": sorted_rows([normalize_row(row, INVOICE_FIELDS) for row in (doc.get("invoices") or [])], invoice_key),
         "articles": sorted_rows([normalize_row(row, ARTICLE_FIELDS) for row in (doc.get("articles") or [])], article_key),
+        "fees": sorted_rows([normalize_row(row, FEE_FIELDS) for row in (doc.get("fees") or [])], fee_key),
         "tariffs": sorted_rows([normalize_row(row, TARIFF_FIELDS) for row in (doc.get("tariff_lines") or [])], tariff_key),
     }
 
 
+
 def build_mapped_snapshot(mapped: dict[str, Any]) -> dict[str, Any]:
+    derived_status = {
+        "status": derive_entry_status(mapped, source_active=mapped.get("source_active", 1)),
+        "psc_status": derive_psc_status(mapped),
+        "liquidation_status": derive_liquidation_status(mapped),
+    }
     return {
         "header": {field: normalize_value(mapped.get(field)) for field in HEADER_FIELDS},
+        "status": {field: normalize_value(derived_status.get(field)) for field in STATUS_FIELDS},
         "shipments": sorted_rows([normalize_mapping_row(row, SHIPMENT_FIELDS) for row in (mapped.get("shipments") or [])], shipment_key),
         "invoices": sorted_rows([normalize_mapping_row(row, INVOICE_FIELDS) for row in (mapped.get("invoices") or [])], invoice_key),
         "articles": sorted_rows([normalize_mapping_row(row, ARTICLE_FIELDS) for row in (mapped.get("articles") or [])], article_key),
+        "fees": sorted_rows([normalize_mapping_row(row, FEE_FIELDS) for row in (mapped.get("fees") or [])], fee_key),
         "tariffs": sorted_rows([normalize_mapping_row(row, TARIFF_FIELDS) for row in (mapped.get("tariff_lines") or [])], tariff_key),
     }
+
 
 
 def compare_snapshots(expected: dict[str, Any], actual: dict[str, Any]) -> list[dict[str, Any]]:
     differences: list[dict[str, Any]] = []
 
-    for field, expected_value in expected["header"].items():
-        actual_value = actual["header"].get(field)
+    compare_scalar_section("header", expected["header"], actual["header"], differences)
+    compare_scalar_section("status", expected["status"], actual["status"], differences)
+    compare_row_section("shipments", expected["shipments"], actual["shipments"], shipment_key, differences)
+    compare_row_section("invoices", expected["invoices"], actual["invoices"], invoice_key, differences)
+    compare_row_section("articles", expected["articles"], actual["articles"], article_key, differences)
+    compare_row_section("fees", expected["fees"], actual["fees"], fee_key, differences)
+    compare_row_section("tariffs", expected["tariffs"], actual["tariffs"], tariff_key, differences)
+    return differences
+
+
+
+def compare_scalar_section(section: str, expected_values: dict[str, Any], actual_values: dict[str, Any], differences: list[dict[str, Any]]):
+    for field, expected_value in expected_values.items():
+        actual_value = actual_values.get(field)
+        if money_equivalent(field, expected_value, actual_value):
+            continue
         if expected_value != actual_value:
             differences.append({
-                "section": "header",
+                "section": section,
                 "field": field,
                 "expected": expected_value,
                 "actual": actual_value,
             })
 
-    compare_row_section("shipments", expected["shipments"], actual["shipments"], shipment_key, differences)
-    compare_row_section("invoices", expected["invoices"], actual["invoices"], invoice_key, differences)
-    compare_row_section("articles", expected["articles"], actual["articles"], article_key, differences)
-    compare_row_section("tariffs", expected["tariffs"], actual["tariffs"], tariff_key, differences)
-    return differences
 
 
 def compare_row_section(section: str, expected_rows: list[dict[str, Any]], actual_rows: list[dict[str, Any]], key_fn, differences: list[dict[str, Any]]):
@@ -156,7 +214,7 @@ def compare_row_section(section: str, expected_rows: list[dict[str, Any]], actua
         actual_row = actual_map[key]
         for field, expected_value in expected_row.items():
             actual_value = actual_row.get(field)
-            if field in ("entered_value", "duty_amount", "harbor_maintenance_fee", "merchandise_processing_fee") and expected_value in (0, 0.0, None) and actual_value in (0, 0.0, None):
+            if money_equivalent(field, expected_value, actual_value):
                 continue
             if expected_value != actual_value:
                 differences.append({
@@ -173,12 +231,20 @@ def compare_row_section(section: str, expected_rows: list[dict[str, Any]], actua
             differences.append({"section": section, "key": key, "expected": None, "actual": actual_row, "kind": "unexpected_in_lds"})
 
 
+
+def money_equivalent(field: str, expected_value: Any, actual_value: Any) -> bool:
+    return field in MONEY_EQUIVALENT_FIELDS and expected_value in (0, 0.0, None) and actual_value in (0, 0.0, None)
+
+
+
 def normalize_row(row, fields: tuple[str, ...]) -> dict[str, Any]:
     return {field: normalize_value(get_value(row, field)) for field in fields}
 
 
+
 def normalize_mapping_row(row: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
     return {field: normalize_value(row.get(field)) for field in fields}
+
 
 
 def get_value(row, fieldname: str):
@@ -190,6 +256,7 @@ def get_value(row, fieldname: str):
     if callable(getter):
         return getter(fieldname)
     return None
+
 
 
 def normalize_value(value: Any):
@@ -208,16 +275,20 @@ def normalize_value(value: Any):
         return text
 
 
+
 def sorted_rows(rows: list[dict[str, Any]], key_fn):
     return sorted(rows, key=key_fn)
+
 
 
 def shipment_key(row: dict[str, Any]):
     return (row.get("shipment_no") or "",)
 
 
+
 def invoice_key(row: dict[str, Any]):
     return (row.get("shipment_no") or "", row.get("invoice_number") or "")
+
 
 
 def article_key(row: dict[str, Any]):
@@ -228,6 +299,18 @@ def article_key(row: dict[str, Any]):
         row.get("line_item_identifier") or "",
         row.get("description") or "",
     )
+
+
+
+def fee_key(row: dict[str, Any]):
+    return (
+        row.get("fee_type") or "",
+        row.get("shipment_no") or "",
+        row.get("invoice_number") or "",
+        row.get("article_line_no") or "",
+        row.get("description") or "",
+    )
+
 
 
 def tariff_key(row: dict[str, Any]):
