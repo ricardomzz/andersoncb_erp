@@ -100,13 +100,11 @@ TARIFF_FIELDS = (
     "quantity",
     "uom",
     "entered_value",
-    "duty_amount",
     "country_of_origin",
 )
 
 MONEY_EQUIVALENT_FIELDS = (
     "entered_value",
-    "duty_amount",
     "harbor_maintenance_fee",
     "merchandise_processing_fee",
     "total_entered_value",

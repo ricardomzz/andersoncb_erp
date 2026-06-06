@@ -56,7 +56,7 @@ def make_doc(**overrides):
             DummyRow(fee_type='MPF', amount=2.2, currency='USD', description='TEST GOODS', shipment_no='S1', invoice_number='INV-001', article_line_no='1'),
             DummyRow(fee_type='HMF', amount=1.1, currency='USD', description='TEST GOODS', shipment_no='S1', invoice_number='INV-001', article_line_no='1'),
         ],
-        'tariff_lines': [DummyRow(shipment_no='S1', invoice_number='INV-001', article_line_no='1', line_no='1', hs_code='4819200040', description='OTHR NONCORRGTED PAPR FLDG CTN', quantity=5.0, uom='KG', entered_value=100.0, duty_amount=3.0, country_of_origin='CN')],
+        'tariff_lines': [DummyRow(shipment_no='S1', invoice_number='INV-001', article_line_no='1', line_no='1', hs_code='4819200040', description='OTHR NONCORRGTED PAPR FLDG CTN', quantity=5.0, uom='KG', entered_value=100.0, country_of_origin='CN')],
     }
     base.update(overrides)
     return DummyDoc(**base)
@@ -104,7 +104,7 @@ def matching_mapped_payload():
             {'fee_type': 'MPF', 'amount': 2.2, 'currency': 'USD', 'description': 'TEST GOODS', 'shipment_no': 'S1', 'invoice_number': 'INV-001', 'article_line_no': '1'},
             {'fee_type': 'HMF', 'amount': 1.1, 'currency': 'USD', 'description': 'TEST GOODS', 'shipment_no': 'S1', 'invoice_number': 'INV-001', 'article_line_no': '1'},
         ],
-        'tariff_lines': [{'shipment_no': 'S1', 'invoice_number': 'INV-001', 'article_line_no': '1', 'line_no': '1', 'hs_code': '4819200040', 'description': 'OTHR NONCORRGTED PAPR FLDG CTN', 'quantity': 5.0, 'uom': 'KG', 'entered_value': 100.0, 'duty_amount': 3.0, 'country_of_origin': 'CN'}],
+        'tariff_lines': [{'shipment_no': 'S1', 'invoice_number': 'INV-001', 'article_line_no': '1', 'line_no': '1', 'hs_code': '4819200040', 'description': 'OTHR NONCORRGTED PAPR FLDG CTN', 'quantity': 5.0, 'uom': 'KG', 'entered_value': 100.0, 'country_of_origin': 'CN'}],
     }
 
 
