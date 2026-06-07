@@ -1,5 +1,7 @@
 import { expect, Page } from '@playwright/test';
 
+const GUIDED_WORKSPACE_SELECTOR = '.customs-entry-guided-workspace';
+
 export type ShipmentInput = {
   shipmentNo: string;
   mode: string;
@@ -107,15 +109,6 @@ export async function setFormValues(page: Page, values: Record<string, any>) {
   await page.evaluate(async (payload) => {
     await (window as any).cur_frm.set_value(payload);
   }, values);
-}
-
-export async function addChildRow(page: Page, fieldname: string, childtype: string, values: Record<string, any>) {
-  await page.evaluate(({ fieldname, childtype, values }) => {
-    const frm = (window as any).cur_frm;
-    const row = (window as any).frappe.model.add_child(frm.doc, childtype, fieldname);
-    Object.assign(row, values);
-    frm.refresh_field(fieldname);
-  }, { fieldname, childtype, values });
 }
 
 export async function saveDraft(page: Page) {
@@ -259,14 +252,100 @@ export async function ensureCarrier(page: Page, registry: Map<string, string>, k
   await setFormValues(page, values);
   await saveDraft(page);
   const carrierName = await currentDocName(page);
-  await submitDoc(page);
+  try {
+    await submitDoc(page);
+  } catch (error: any) {
+    const message = String(error?.message || error || '');
+    const duplicateCode = message.includes('dbo.Carriers') && message.includes('IX_Code');
+    if (!duplicateCode) {
+      throw error;
+    }
+  }
   registry.set(key, carrierName);
   return carrierName;
 }
 
+async function expectGuidedWorkspace(page: Page) {
+  await expect(page.locator(GUIDED_WORKSPACE_SELECTOR)).toBeVisible({ timeout: 10000 });
+}
+
+async function clickGuidedAction(page: Page, action: string, textFilter?: string) {
+  await expectGuidedWorkspace(page);
+  let locator = page.locator(`${GUIDED_WORKSPACE_SELECTOR} [data-action="${action}"]`);
+  if (textFilter) {
+    locator = locator.filter({ hasText: textFilter });
+  }
+  await expect(locator.first()).toBeVisible({ timeout: 10000 });
+  await locator.first().click();
+}
+
+async function waitForOpenGrid(page: Page, fieldname: string) {
+  await page.waitForFunction(
+    (expected) => {
+      const frm = (window as any).cur_frm;
+      const row = frm?.open_grid_row?.();
+      return Boolean(row) && row.grid?.df?.fieldname === expected;
+    },
+    fieldname,
+  );
+}
+
+async function setOpenGridValues(page: Page, values: Record<string, any>) {
+  await page.evaluate(async (payload) => {
+    const frm = (window as any).cur_frm;
+    const row = frm?.open_grid_row?.();
+    if (!row?.doc) {
+      throw new Error('No open grid row');
+    }
+    for (const [fieldname, value] of Object.entries(payload)) {
+      if (value === undefined || value === null || value === '') continue;
+      await (window as any).frappe.model.set_value(row.doc.doctype, row.doc.name, fieldname, value);
+    }
+    frm.refresh_field(row.grid.df.fieldname);
+  }, values);
+}
+
+async function getOpenGridDoc(page: Page) {
+  return await page.evaluate(() => {
+    const row = (window as any).cur_frm?.open_grid_row?.();
+    if (!row?.doc) {
+      return null;
+    }
+    return JSON.parse(JSON.stringify(row.doc));
+  });
+}
+
+async function closeOpenGrid(page: Page) {
+  await page.evaluate(() => {
+    (window as any).frappe.ui.form.close_grid_form();
+  });
+  await page.waitForFunction(() => !(window as any).cur_frm?.open_grid_row?.());
+  await page.waitForFunction(() => !document.querySelector('.modal.show'));
+}
+
+async function selectShipmentContext(page: Page, shipmentNo: string) {
+  await clickGuidedAction(page, 'select-shipment', `Shipment ${shipmentNo}`);
+}
+
+async function selectInvoiceContext(page: Page, invoiceNumber: string) {
+  await clickGuidedAction(page, 'select-invoice', invoiceNumber);
+}
+
+async function selectArticleContext(page: Page, articleLineNo: string, description: string) {
+  const match = description ? `Article ${articleLineNo} · ${description}` : `Article ${articleLineNo}`;
+  await clickGuidedAction(page, 'select-article', match);
+}
+
 export async function createAndSubmitEntry(page: Page, scenario: EntryScenario, importerName: string, carrierNamesByKey: Map<string, string>, prep: Awaited<ReturnType<typeof loadExecutionPrep>>) {
+  const shipmentNoByRef = new Map<string, string>();
+  const invoiceNoByRef = new Map<string, string>();
+  const articleLineNoByRef = new Map<string, string>();
+  const resolvePort = (value?: string) => (value ? prep.portMap.get(value) || value : value);
+  const uniqueRunToken = String(Date.now()).slice(-7);
+
   await page.goto('/app/customs-entry/new-customs-entry-1');
   await waitForForm(page, 'Customs Entry');
+  await expectGuidedWorkspace(page);
   await setFormValues(page, {
     entry_number: `TMP${scenario.clientRef.replace(/[^0-9]/g, '').slice(-5).padStart(5, '0')}`,
     filer_code: 'SY1',
@@ -275,8 +354,8 @@ export async function createAndSubmitEntry(page: Page, scenario: EntryScenario, 
     estimated_entry_date: '2026-06-05',
     client_ref: scenario.clientRef,
     importer_profile: importerName,
-    port_of_entry: prep.portMap.get(scenario.portOfEntrySymbol),
-    port_of_unlading: prep.portMap.get(scenario.portOfUnladingSymbol),
+    port_of_entry: resolvePort(scenario.portOfEntrySymbol),
+    port_of_unlading: resolvePort(scenario.portOfUnladingSymbol),
     transport_mode: scenario.transportMode,
     conveyance_name: scenario.conveyanceName,
     trip_identifier: scenario.tripIdentifier,
@@ -290,38 +369,52 @@ export async function createAndSubmitEntry(page: Page, scenario: EntryScenario, 
     currency: scenario.currency,
   });
 
-  for (const shipment of scenario.shipments) {
-    await addChildRow(page, 'shipments', 'Entry Shipment', {
-      shipment_no: shipment.shipmentNo,
+  for (const [index, shipment] of scenario.shipments.entries()) {
+    const generatedShipmentNo = `${uniqueRunToken}${index + 1}`;
+    await clickGuidedAction(page, 'add-shipment');
+    await waitForOpenGrid(page, 'shipments');
+    await setOpenGridValues(page, {
+      shipment_no: generatedShipmentNo,
       mode: shipment.mode,
       carrier_profile: carrierNamesByKey.get(shipment.carrierName),
-      port_of_entry: prep.portMap.get(shipment.portOfEntry),
-      port_of_unlading: prep.portMap.get(shipment.portOfUnlading),
+      port_of_entry: resolvePort(shipment.portOfEntry),
+      port_of_unlading: resolvePort(shipment.portOfUnlading),
       date_of_arrival: shipment.dateOfArrival,
       date_of_import: shipment.dateOfImport,
       date_of_export: shipment.dateOfExport,
       voyage_or_flight: shipment.voyageOrFlight,
-      master_bill: shipment.masterBill,
     });
+    const openDoc = await getOpenGridDoc(page);
+    shipmentNoByRef.set(shipment.shipmentNo, openDoc?.shipment_no || generatedShipmentNo);
+    await closeOpenGrid(page);
   }
 
   for (const invoice of scenario.invoices) {
-    await addChildRow(page, 'invoices', 'Entry Invoice', {
+    const shipmentNo = shipmentNoByRef.get(invoice.shipmentNo) || invoice.shipmentNo;
+    await selectShipmentContext(page, shipmentNo);
+    await clickGuidedAction(page, 'add-invoice');
+    await waitForOpenGrid(page, 'invoices');
+    await setOpenGridValues(page, {
       invoice_number: invoice.invoiceNumber,
-      shipment_no: invoice.shipmentNo,
       invoice_date: invoice.invoiceDate,
       currency: invoice.currency,
       invoice_amount: invoice.invoiceAmount,
       vendor_name: invoice.vendorName,
     });
+    const openDoc = await getOpenGridDoc(page);
+    invoiceNoByRef.set(invoice.invoiceNumber, openDoc?.invoice_number || invoice.invoiceNumber);
+    await closeOpenGrid(page);
   }
 
   for (const article of scenario.articles) {
-    await addChildRow(page, 'articles', 'Entry Article', {
-      article_line_no: article.articleLineNo,
+    const shipmentNo = shipmentNoByRef.get(article.shipmentNo) || article.shipmentNo;
+    const invoiceNumber = invoiceNoByRef.get(article.invoiceNumber) || article.invoiceNumber;
+    await selectShipmentContext(page, shipmentNo);
+    await selectInvoiceContext(page, invoiceNumber);
+    await clickGuidedAction(page, 'add-article');
+    await waitForOpenGrid(page, 'articles');
+    await setOpenGridValues(page, {
       description: article.description,
-      invoice_number: article.invoiceNumber,
-      shipment_no: article.shipmentNo,
       line_item_identifier: article.lineItemIdentifier,
       country_of_origin: article.countryOfOrigin,
       country_of_export: article.countryOfExport,
@@ -330,20 +423,29 @@ export async function createAndSubmitEntry(page: Page, scenario: EntryScenario, 
       harbor_maintenance_fee: article.harborMaintenanceFee && article.harborMaintenanceFee > 0 ? article.harborMaintenanceFee : undefined,
       merchandise_processing_fee: article.merchandiseProcessingFee && article.merchandiseProcessingFee > 0 ? article.merchandiseProcessingFee : undefined,
     });
+    const openDoc = await getOpenGridDoc(page);
+    articleLineNoByRef.set(article.articleLineNo, openDoc?.article_line_no || article.articleLineNo);
+    await closeOpenGrid(page);
   }
 
   for (const tariff of scenario.tariffs) {
-    await addChildRow(page, 'tariff_lines', 'Entry Tariff Line', {
-      line_no: tariff.lineNo,
-      article_line_no: tariff.articleLineNo,
-      shipment_no: tariff.shipmentNo,
-      invoice_number: tariff.invoiceNumber,
+    const shipmentNo = shipmentNoByRef.get(tariff.shipmentNo) || tariff.shipmentNo;
+    const invoiceNumber = invoiceNoByRef.get(tariff.invoiceNumber) || tariff.invoiceNumber;
+    const articleLineNo = articleLineNoByRef.get(tariff.articleLineNo) || tariff.articleLineNo;
+    const articleScenario = scenario.articles.find((row) => row.articleLineNo === tariff.articleLineNo);
+    await selectShipmentContext(page, shipmentNo);
+    await selectInvoiceContext(page, invoiceNumber);
+    await selectArticleContext(page, articleLineNo, articleScenario?.description || '');
+    await clickGuidedAction(page, 'add-tariff');
+    await waitForOpenGrid(page, 'tariff_lines');
+    await setOpenGridValues(page, {
       hs_code: prep.htsMap.get(tariff.hsCode) || tariff.hsCode,
       quantity: tariff.quantity,
       uom: tariff.uom,
       entered_value: tariff.enteredValue,
       country_of_origin: tariff.countryOfOrigin,
     });
+    await closeOpenGrid(page);
   }
 
   await saveDraft(page);

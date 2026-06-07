@@ -1,6 +1,7 @@
 import frappe
 
 from andersoncb_erp.services.customs_port_directory import ensure_customs_port, search_customs_ports_local
+from andersoncb_erp.services.harmonized_tariff_directory import search_harmonized_tariffs as search_harmonized_tariffs_local
 from andersoncb_erp.services.dotnet_possible_values import get_authoritative_possible_values
 from andersoncb_erp.services.party_submission import submit_carrier_to_lds, submit_importer_profile_to_lds
 from andersoncb_erp.services.purge import purge_lds_synced_data
@@ -82,6 +83,11 @@ def search_customs_ports(doctype, txt, searchfield, start, page_len, filters=Non
         rows = search_customs_ports_local(txt, page_len=int(page_len or 20))
     return rows
 
+
+
+@frappe.whitelist()
+def search_harmonized_tariffs(txt: str, page_len: int = 10):
+    return search_harmonized_tariffs_local(txt, page_len=int(page_len or 10))
 
 
 @frappe.whitelist()

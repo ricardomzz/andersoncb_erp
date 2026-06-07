@@ -147,3 +147,24 @@ These reruns were executed one case at a time with a single Playwright worker af
 | G23 | `30052518` | `1922` | Pass | Serial rerun confirmed the agriculture / grain-style truck case. |
 | G24 | `30052526` | `1923` | Pass | Serial rerun confirmed the AD/CVD air case for regulated-style goods. |
 | G25 | `30052534` | `1924` | Pass | Serial rerun confirmed the final branch-office stress case with two shipments and four invoices. |
+
+## Guided Workspace Rerun
+This rerun executed the full catalog through the guided `Customs Entry` workspace only, with one Playwright worker and LDS round-trip verification still enforced after submit.
+
+### Outcome
+- Synthetic cases `01` through `50`: Pass
+- Generic cases `G01` through `G25`: Pass
+- Execution mode: serial, one browser worker, guided workspace only
+- Verification mode: UI entry -> LDS submit -> `andersoncb_erp.api.verify_entry_roundtrip`
+
+### Guided Workspace Runner Adjustments
+- Wait for row-edit modals to fully close before the next workspace action.
+- Generate shipment numbers uniquely across the whole suite, not just inside a single case.
+- Accept both symbolic ports and direct port codes in the shared runner.
+- Continue LDS importer/carrier submission when the environment is healthy.
+- Tolerate duplicate LDS carrier-code setup by reusing the local carrier record when LDS already has that code.
+
+### Guided Workspace Validation Notes
+- The first hard blocker was LDS downtime on `CustomsEntryManager.New`; once LDS recovered, the same guided path resumed successfully.
+- The remaining failures were harness-level relationship-entry issues, not model-level mapping failures.
+- After the runner fixes above, the guided workspace completed the full 75-case catalog successfully.

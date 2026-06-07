@@ -1,188 +1,140 @@
-import { expect, test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import {
+  createAndSubmitEntry,
+  ensureCarrier,
+  ensureImporter,
+  loadExecutionPrep,
+  login,
+  EntryScenario,
+} from './customs-entry-runner';
 
-const loginEmail = process.env.UI_LOGIN_EMAIL;
-const loginPassword = process.env.UI_LOGIN_PASSWORD;
+test.describe.configure({ mode: 'serial' });
 
-async function login(page) {
-  if (!loginEmail || !loginPassword) throw new Error('UI_LOGIN_EMAIL and UI_LOGIN_PASSWORD are required.');
-  await page.goto('/app');
-  if (page.url().includes('/login')) {
-    await page.locator('#login_email').fill(loginEmail);
-    await page.locator('#login_password').fill(loginPassword);
-    await page.getByRole('button', { name: /login/i }).click();
-  }
-  await expect(page).toHaveURL(/\/app($|\/)/);
-  await page.waitForFunction(() => Boolean((window as any).frappe?.call));
-}
-
-async function waitForForm(page, doctype: string) {
-  await page.waitForFunction((expected) => Boolean((window as any).cur_frm) && (window as any).cur_frm.doctype === expected, doctype);
-}
-
-async function setFormValues(page, values: Record<string, any>) {
-  await page.evaluate(async (payload) => { await (window as any).cur_frm.set_value(payload); }, values);
-}
-
-async function addChildRow(page, fieldname: string, childtype: string, values: Record<string, any>) {
-  await page.evaluate(({ fieldname, childtype, values }) => {
-    const frm = (window as any).cur_frm;
-    const row = (window as any).frappe.model.add_child(frm.doc, childtype, fieldname);
-    Object.assign(row, values);
-    frm.refresh_field(fieldname);
-  }, { fieldname, childtype, values });
-}
-
-async function saveDraft(page) {
-  const result = await page.evaluate(async () => {
-    const frm = (window as any).cur_frm;
-    try {
-      const response = await (window as any).frappe.call({ method: 'frappe.desk.form.save.savedocs', args: { doc: JSON.stringify(frm.doc), action: 'Save' } });
-      return { ok: true, response };
-    } catch (error: any) {
-      const serialized = (() => { try { return JSON.stringify(error); } catch { return String(error); } })();
-      return { ok: false, error: error?.message || serialized || String(error) };
-    }
-  });
-  if (!result?.ok) throw new Error(result?.error || 'Save failed');
-  await page.waitForLoadState('networkidle');
-  await page.reload({ waitUntil: 'networkidle' });
-}
-
-async function submitDoc(page) {
-  const context = await page.evaluate(() => ({ doctype: (window as any).cur_frm.doctype as string }));
-  const routeByDoctype: Record<string, string> = { 'Importer Profile': 'importer-profile', Carrier: 'carrier', 'Customs Entry': 'customs-entry' };
-  const result = await page.evaluate(async () => {
-    const frm = (window as any).cur_frm;
-    const methodByDoctype: Record<string, string> = { 'Importer Profile': 'andersoncb_erp.api.submit_importer_profile', Carrier: 'andersoncb_erp.api.submit_carrier', 'Customs Entry': 'andersoncb_erp.api.submit_entry' };
-    const method = methodByDoctype[frm.doctype];
-    if (!method) throw new Error(`No submit RPC mapping for ${frm.doctype}`);
-    try {
-      const response = await (window as any).frappe.call({ method, args: { name: frm.doc.name } });
-      return { ok: true, result: response.message };
-    } catch (error: any) {
-      const serialized = (() => { try { return JSON.stringify(error); } catch { return String(error); } })();
-      return { ok: false, error: error?.message || serialized || String(error) };
-    }
-  });
-  if (!result?.ok || !result?.result?.ok) throw new Error(result?.error || result?.result?.error || 'Submit failed');
-  await page.waitForLoadState('networkidle');
-  const finalName = result?.result?.name;
-  const route = routeByDoctype[context.doctype];
-  if (finalName && route) await page.goto(`/app/${route}/${finalName}`, { waitUntil: 'networkidle' });
-  else await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForFunction(() => Boolean((window as any).cur_frm) && (window as any).cur_frm.doc.docstatus === 1);
-}
-
-async function currentDocName(page) {
-  await page.waitForFunction(() => Boolean((window as any).cur_frm?.doc?.name));
-  return await page.evaluate(() => (window as any).cur_frm.doc.name as string);
-}
-
-async function currentEntryNumber(page) {
-  await page.waitForFunction(() => Boolean((window as any).cur_frm?.doc));
-  return await page.evaluate(() => ((window as any).cur_frm.doc.entry_number || (window as any).cur_frm.doc.name) as string);
-}
-
-async function getExistingDocName(page, doctype: string, fieldname: string, value: string) {
-  return await page.evaluate(async ({ doctype, fieldname, value }) => {
-    const response = await (window as any).frappe.call({ method: 'frappe.client.get_list', args: { doctype, filters: [[doctype, fieldname, '=', value]], fields: ['name'], limit_page_length: 1 } });
-    return response.message?.[0]?.name || null;
-  }, { doctype, fieldname, value });
-}
-
-async function ensureImporterProfile(page, profile: Record<string, any>) {
-  const existing = await getExistingDocName(page, 'Importer Profile', 'importer_code', profile.importer_code);
-  if (existing) return existing;
-  await page.goto('/app/importer-profile/new-importer-profile-1');
-  await waitForForm(page, 'Importer Profile');
-  await setFormValues(page, profile);
-  await saveDraft(page);
-  const importerName = await currentDocName(page);
-  await submitDoc(page);
-  return importerName;
-}
-
-async function ensureCarrier(page, carrier: Record<string, any>) {
-  const existing = await getExistingDocName(page, 'Carrier', 'carrier_code', carrier.carrier_code);
-  if (existing) return existing;
-  await page.goto('/app/carrier/new-carrier-1');
-  await waitForForm(page, 'Carrier');
-  await setFormValues(page, carrier);
-  await saveDraft(page);
-  const carrierName = await currentDocName(page);
-  await submitDoc(page);
-  return carrierName;
-}
+const importerRegistry = new Map<string, string>();
+const carrierRegistry = new Map<string, string>();
 
 type CarrierScenario = Record<string, any> & { carrier_ref: string };
 type ShipmentScenario = Record<string, any> & { shipment_ref: string; carrier_ref: string };
 type InvoiceScenario = Record<string, any> & { invoice_ref: string; shipment_ref: string };
 type ArticleScenario = Record<string, any> & { invoice_ref: string; shipment_ref: string };
 type TariffScenario = Record<string, any> & { invoice_ref: string; shipment_ref: string };
-type EntryCase = { id: string; title: string; importer: Record<string, any>; carriers: CarrierScenario[]; entry: Record<string, any>; shipmentRows: ShipmentScenario[]; invoiceRows: InvoiceScenario[]; articleRows: ArticleScenario[]; tariffRows: TariffScenario[]; };
+type EntryCase = {
+  id: string;
+  title: string;
+  importer: Record<string, any>;
+  carriers: CarrierScenario[];
+  entry: Record<string, any>;
+  shipmentRows: ShipmentScenario[];
+  invoiceRows: InvoiceScenario[];
+  articleRows: ArticleScenario[];
+  tariffRows: TariffScenario[];
+};
 
-async function runEntryCase(page, scenario: EntryCase) {
-  const runId = String(Date.now()).slice(-6);
+function buildEntryScenario(scenario: EntryCase, runId: string): EntryScenario {
   const clientRef = `UI-${scenario.id}-${runId}`;
   const bondNumber = `B${scenario.id}${runId}`.slice(0, 9);
   const houseBill = `HB${scenario.id}${runId}`;
   const masterBill = `MB${scenario.id}${runId}`;
-  const draftEntryNumber = `TMP${scenario.id.replace('G', '').slice(-2)}${runId.slice(-3)}`;
+  return {
+    caseId: scenario.id,
+    focus: scenario.title,
+    importerKey: scenario.id,
+    importerDisplayName: scenario.importer.display_name,
+    importerCode: `${scenario.id.replace(/[^A-Z0-9]/g, '').slice(0, 3)}${runId.slice(-4)}`.slice(0, 8),
+    carrierKey: scenario.carriers[0]?.carrier_ref || scenario.id,
+    carrierDisplayName: scenario.carriers[0]?.display_name || scenario.id,
+    carrierCode: scenario.carriers[0]?.carrier_code || scenario.id,
+    entryType: scenario.entry.entry_type,
+    transportMode: scenario.entry.transport_mode,
+    paymentType: scenario.entry.payment_type,
+    bondType: scenario.entry.bond_type,
+    portOfEntrySymbol: scenario.entry.port_of_entry,
+    portOfUnladingSymbol: scenario.entry.port_of_unlading,
+    clientRef,
+    conveyanceName: scenario.entry.conveyance_name,
+    tripIdentifier: scenario.entry.trip_identifier,
+    suretyCode: scenario.entry.surety_code,
+    bondNumber,
+    houseBill,
+    masterBill,
+    totalEnteredValue: scenario.entry.total_entered_value,
+    currency: scenario.entry.currency,
+    shipments: scenario.shipmentRows.map((row) => ({
+      shipmentNo: row.shipment_ref,
+      mode: row.mode,
+      carrierName: row.carrier_ref,
+      portOfEntry: row.port_of_entry,
+      portOfUnlading: row.port_of_unlading,
+      dateOfArrival: row.date_of_arrival,
+      dateOfImport: row.date_of_import,
+      dateOfExport: row.date_of_export,
+      voyageOrFlight: row.voyage_or_flight,
+      masterBill,
+    })),
+    invoices: scenario.invoiceRows.map((row) => ({
+      invoiceNumber: row.invoice_ref,
+      shipmentNo: row.shipment_ref,
+      invoiceDate: row.invoice_date,
+      currency: row.currency,
+      invoiceAmount: row.invoice_amount,
+      vendorName: row.vendor_name,
+    })),
+    articles: scenario.articleRows.map((row) => ({
+      articleLineNo: row.article_line_no,
+      description: row.description,
+      invoiceNumber: row.invoice_ref,
+      shipmentNo: row.shipment_ref,
+      lineItemIdentifier: row.line_item_identifier,
+      countryOfOrigin: row.country_of_origin,
+      countryOfExport: row.country_of_export,
+      grossWeight: row.gross_weight,
+      enteredValue: row.entered_value,
+      harborMaintenanceFee: row.harbor_maintenance_fee,
+      merchandiseProcessingFee: row.merchandise_processing_fee,
+    })),
+    tariffs: scenario.tariffRows.map((row) => ({
+      lineNo: row.line_no,
+      articleLineNo: row.article_line_no,
+      shipmentNo: row.shipment_ref,
+      invoiceNumber: row.invoice_ref,
+      hsCode: row.hs_code,
+      quantity: row.quantity,
+      uom: row.uom,
+      enteredValue: row.entered_value,
+      countryOfOrigin: row.country_of_origin,
+    })),
+  };
+}
 
+async function runEntryCase(page, scenario: EntryCase) {
+  const runId = String(Date.now()).slice(-6);
   await login(page);
+  const prep = await loadExecutionPrep(page);
 
-  const importerCode = `${scenario.id.replace(/[^A-Z0-9]/g, '').slice(0, 3)}${runId.slice(-4)}`.slice(0, 8);
-  const importerName = await ensureImporterProfile(page, {
+  const entryScenario = buildEntryScenario(scenario, runId);
+  const importerName = await ensureImporter(page, importerRegistry, entryScenario.importerCode, {
     ...scenario.importer,
     display_name: `${scenario.importer.display_name} ${runId}`,
-    importer_code: importerCode,
+    importer_code: entryScenario.importerCode,
     email: `${scenario.id.toLowerCase()}+${runId}@example.com`,
   });
 
-  const carrierNameByRef = new Map<string, string>();
+  const carrierNamesByRef = new Map<string, string>();
   for (const carrier of scenario.carriers) {
     const carrierCodeSeed = (carrier.carrier_code || carrier.carrier_ref).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
     const carrierCode = `${carrierCodeSeed.slice(0, 2)}${runId.slice(-2)}${carrier.carrier_ref.slice(-1)}`.slice(0, 4);
-    const carrierName = await ensureCarrier(page, { ...carrier, display_name: `${carrier.display_name} ${runId}`, carrier_code: carrierCode });
-    carrierNameByRef.set(carrier.carrier_ref, carrierName);
+    const registryKey = `${scenario.id}:${carrier.carrier_ref}:${carrierCode}`;
+    const carrierName = await ensureCarrier(page, carrierRegistry, registryKey, {
+      ...carrier,
+      display_name: `${carrier.display_name} ${runId}`,
+      carrier_code: carrierCode,
+    });
+    carrierNamesByRef.set(carrier.carrier_ref, carrierName);
   }
 
-  const shipmentNoByRef = new Map<string, string>();
-  scenario.shipmentRows.forEach((shipment, index) => shipmentNoByRef.set(shipment.shipment_ref, `${scenario.id.replace('G', '9')}${runId}${index + 1}`));
-  const invoiceNumberByRef = new Map<string, string>();
-  scenario.invoiceRows.forEach((invoice, index) => invoiceNumberByRef.set(invoice.invoice_ref, `INV-${scenario.id}-${runId}-${index + 1}`));
-
-  await page.goto('/app/customs-entry/new-customs-entry-1');
-  await waitForForm(page, 'Customs Entry');
-  await setFormValues(page, { ...scenario.entry, entry_number: draftEntryNumber, client_ref: clientRef, bond_number: bondNumber, house_bill: houseBill, master_bill: masterBill, importer_profile: importerName });
-
-  for (const shipment of scenario.shipmentRows) {
-    await addChildRow(page, 'shipments', 'Entry Shipment', { ...shipment, shipment_no: shipmentNoByRef.get(shipment.shipment_ref), carrier_profile: carrierNameByRef.get(shipment.carrier_ref) });
-  }
-  for (const invoice of scenario.invoiceRows) {
-    await addChildRow(page, 'invoices', 'Entry Invoice', { ...invoice, shipment_no: shipmentNoByRef.get(invoice.shipment_ref), invoice_number: invoiceNumberByRef.get(invoice.invoice_ref) });
-  }
-  for (const article of scenario.articleRows) {
-    await addChildRow(page, 'articles', 'Entry Article', { ...article, shipment_no: shipmentNoByRef.get(article.shipment_ref), invoice_number: invoiceNumberByRef.get(article.invoice_ref) });
-  }
-  for (const tariff of scenario.tariffRows) {
-    await addChildRow(page, 'tariff_lines', 'Entry Tariff Line', { ...tariff, shipment_no: shipmentNoByRef.get(tariff.shipment_ref), invoice_number: invoiceNumberByRef.get(tariff.invoice_ref) });
-  }
-
-  await saveDraft(page);
-  await submitDoc(page);
-
-  const finalName = await currentDocName(page);
-  const finalEntryNumber = await currentEntryNumber(page);
-  expect(finalEntryNumber).toMatch(/^\d{8}$/);
-
-  const verification = await page.evaluate(async (name) => {
-    const response = await (window as any).frappe.call({ method: 'andersoncb_erp.api.verify_entry_roundtrip', args: { name } });
-    return response.message;
-  }, finalName);
-
-  expect(verification.ok).toBeTruthy();
-  expect(verification.differences).toEqual([]);
+  const result = await createAndSubmitEntry(page, entryScenario, importerName, carrierNamesByRef, prep);
+  expect(result.verification.ok).toBeTruthy();
+  expect(result.verification.differences).toEqual([]);
 }
 
 const CASES: EntryCase[] = [
@@ -296,7 +248,6 @@ const CASES: EntryCase[] = [
   },
 ];
 
-test.describe.configure({ mode: 'serial' });
 for (const scenario of CASES) {
   test(`${scenario.id} ${scenario.title}`, async ({ page }) => {
     await runEntryCase(page, scenario);
