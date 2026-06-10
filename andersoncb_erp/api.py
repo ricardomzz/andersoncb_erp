@@ -57,7 +57,7 @@ def repair_failed_draft(name: str):
     if doc.lds_id:
         frappe.throw("Only unsynced failed drafts can be repaired.")
     frappe.db.set_value("Customs Entry", doc.name, {"docstatus": 0, "status": "Draft"}, update_modified=False)
-    for child_field in ("shipments", "invoices", "articles", "fees", "events", "tariff_lines", "references"):
+    for child_field in ("shipments", "invoices", "articles", "fees", "events", "tariff_lines", "references", "documents"):
         for row in doc.get(child_field) or []:
             frappe.db.set_value(row.doctype, row.name, "docstatus", 0, update_modified=False)
     frappe.db.commit()

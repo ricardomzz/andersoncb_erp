@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+from email import policy
+from email.parser import BytesParser
 from typing import Any, Iterable, Sequence
 from xml.etree import ElementTree as ET
 
@@ -62,6 +64,35 @@ class LDSListPage:
 class LDSDirectoryListPage:
     entities: list[LDSDirectoryEntitySummary]
     has_more: bool
+
+
+@dataclass
+class LDSDISInfoSummary:
+    entity_id: str | None
+    dis_number: str | None
+    client_ref: str | None
+    references: str | None
+    document_name: str | None
+    document_tracking_id: str | None
+    document_description: str | None
+    document_review_status: str | None
+    source_link: str | None
+    raw_xml: str
+
+
+@dataclass
+class LDSDISInfoPage:
+    items: list[LDSDISInfoSummary]
+    has_more: bool
+
+
+@dataclass
+class LDSSharePointFileInfoSummary:
+    file_name: str | None
+    document_type_code: str | None
+    document_type_name: str | None
+    source_link: str | None
+    raw_xml: str
 
 
 class LDSClient:
@@ -324,6 +355,155 @@ class LDSClient:
             entity_xml=entity_xml,
         )
 
+    def save_dis_xml(self, entity_xml: str) -> str:
+        return self._save_entity_xml(
+            manager_name='DISManager',
+            interface_name='IEntityManagerOf_DIS',
+            entity_local_names=('DIS',),
+            entity_xml=entity_xml,
+        )
+
+    def fetch_dis_package_xml(self, entity_id: str | int, include: str = 'Documents') -> str:
+        body = (
+            f'<Get xmlns="{TEMPURI_NS}">'
+            f'<Id>{xml_escape(entity_id)}</Id>'
+            f'<include>{xml_escape(include or "")}</include>'
+            '<option i:nil="true" xmlns:i="http://www.w3.org/2001/XMLSchema-instance"/>'
+            '</Get>'
+        )
+        body_element = self._request_manager_xml(
+            'DISManager',
+            'http://tempuri.org/IEntityManagerOf_DIS/Get',
+            body,
+        )
+        entities = extract_named_elements(body_element, ('DIS', 'GetResult'))
+        if not entities:
+            raise LDSClientError('DISManager/Get did not return a DIS payload.')
+        return ET.tostring(entities[0], encoding='unicode')
+
+    def new_dis_xml(self) -> str:
+        body = (
+            f'<New xmlns="{TEMPURI_NS}">'
+            '<sourceId i:nil="true" xmlns:i="http://www.w3.org/2001/XMLSchema-instance"/>'
+            '</New>'
+        )
+        body_element = self._request_manager_xml(
+            'DISManager',
+            'http://tempuri.org/IEntityManagerOf_DIS/New',
+            body,
+        )
+        entities = extract_named_elements(body_element, ('NewResult', 'DIS'))
+        if not entities:
+            raise LDSClientError('DISManager/New did not return a DIS template payload.')
+        return ET.tostring(entities[0], encoding='unicode')
+
+    def create_dis_message_envelope_xml(self, number: str | int) -> str:
+        body = (
+            f'<CreateMessageEnvelope xmlns="{TEMPURI_NS}">'
+            f'<number>{xml_escape(number)}</number>'
+            '</CreateMessageEnvelope>'
+        )
+        body_element = self._request_manager_xml(
+            'DISManager',
+            'http://tempuri.org/IDISManager/CreateMessageEnvelope',
+            body,
+        )
+        envelopes = extract_named_elements(body_element, ('MessageEnvelope', 'CreateMessageEnvelopeResult'))
+        if not envelopes:
+            raise LDSClientError('DISManager/CreateMessageEnvelope did not return a message envelope payload.')
+        return ET.tostring(envelopes[0], encoding='unicode')
+
+    def get_new_dis_document_id(self, message_id: str) -> str:
+        body = (
+            f'<GetNewDocumentID xmlns="{TEMPURI_NS}">'
+            f'<messageId>{xml_escape(message_id)}</messageId>'
+            '</GetNewDocumentID>'
+        )
+        body_element = self._request_manager_xml(
+            'DISManager',
+            'http://tempuri.org/IDISManager/GetNewDocumentID',
+            body,
+        )
+        value = find_text(body_element, 'GetNewDocumentIDResult')
+        if not value:
+            raise LDSClientError('DISManager/GetNewDocumentID did not return a document id.')
+        return value
+
+    def put_dis_to_queue(self, entity_id: str | int) -> None:
+        body = (
+            f'<PutToQUE xmlns="{TEMPURI_NS}">'
+            f'<Id>{xml_escape(entity_id)}</Id>'
+            '</PutToQUE>'
+        )
+        self._request_manager_xml(
+            'DISManager',
+            'http://tempuri.org/IDISManager/PutToQUE',
+            body,
+        )
+
+    def fetch_dis_info_page(self, criteria: str, page_size: int = 50, position: int = 0) -> LDSDISInfoPage:
+        body = (
+            f'<DISInfo xmlns="{TEMPURI_NS}">'
+            f'{self._build_entity_page_query_xml(criteria=criteria, position=position, page_size=page_size, include="")}'
+            '</DISInfo>'
+        )
+        body_element = self._request_manager_xml(
+            'SmsLookupManager',
+            'http://tempuri.org/ISmsLookupManager/DISInfo',
+            body,
+        )
+        info_elements = extract_named_elements(body_element, ('DISInfo',))
+        items = [dis_info_summary_from_element(element) for element in info_elements]
+        has_more = ((find_text(body_element, 'HasNext') or '').strip().lower() == 'true') or len(items) >= page_size
+        return LDSDISInfoPage(items=items, has_more=has_more)
+
+    def fetch_entity_files_info(self, link: str) -> list[LDSSharePointFileInfoSummary]:
+        body = (
+            f'<GetEntityFilesInfo xmlns="{TEMPURI_NS}">'
+            f'<link>{xml_escape(link)}</link>'
+            '</GetEntityFilesInfo>'
+        )
+        body_element = self._request_sharepoint_xml(
+            'http://tempuri.org/ISmsSharePointManager/GetEntityFilesInfo',
+            body,
+        )
+        return [sharepoint_file_info_summary_from_element(element) for element in extract_named_elements(body_element, ('SharePointFileInfo',))]
+
+    def fetch_sharepoint_entity_file(self, link: str, file_name: str) -> bytes:
+        body = (
+            f'<GetEntityFile xmlns="{TEMPURI_NS}">'
+            f'<link>{xml_escape(link)}</link>'
+            f'<fileName>{xml_escape(file_name)}</fileName>'
+            '</GetEntityFile>'
+        )
+        response = self._request_sharepoint_response(
+            'http://tempuri.org/ISmsSharePointManager/GetEntityFile',
+            body,
+        )
+        return parse_soap_binary_response(
+            response.status_code,
+            response.headers.get('Content-Type', ''),
+            response.content,
+        )
+
+    def fetch_entity_file(self, link: str, file_name: str) -> bytes:
+        body = (
+            f'<GetEntityFile xmlns="{TEMPURI_NS}">'
+            f'<link>{xml_escape(link)}</link>'
+            f'<fileName>{xml_escape(file_name)}</fileName>'
+            '</GetEntityFile>'
+        )
+        response = self._request_manager_response(
+            'SmsServiceManager',
+            'http://tempuri.org/ISmsServiceManager/GetEntityFile',
+            body,
+        )
+        return parse_soap_binary_response(
+            response.status_code,
+            response.headers.get('Content-Type', ''),
+            response.content,
+        )
+
     def _save_entity_xml(self, manager_name: str, interface_name: str, entity_local_names: Sequence[str], entity_xml: str) -> str:
         body = f'<Save xmlns="{TEMPURI_NS}">{entity_xml}</Save>'
         body_element = self._request_manager_xml(manager_name, f'http://tempuri.org/{interface_name}/Save', body)
@@ -373,9 +553,11 @@ class LDSClient:
         return LDSDirectoryListPage(entities=entities, has_more=has_more)
 
     def _build_get_page_body(self, criteria: str, position: int, page_size: int, include: str = DEFAULT_INCLUDE) -> str:
+        return f'<GetPage xmlns="{TEMPURI_NS}">{self._build_entity_page_query_xml(criteria=criteria, position=position, page_size=page_size, include=include)}</GetPage>'
+
+    def _build_entity_page_query_xml(self, criteria: str, position: int, page_size: int, include: str = DEFAULT_INCLUDE) -> str:
         return (
-            f'<GetPage xmlns="{TEMPURI_NS}">'
-            f'<pageQuery xmlns:i="{XSI_NS}">'
+            f'<query xmlns:i="{XSI_NS}">'
             f'<Criteria xmlns="">{xml_escape(criteria)}</Criteria>'
             f'<Include xmlns="">{xml_escape(include or "")}</Include>'
             '<Navigation xmlns="">Refresh</Navigation>'
@@ -386,11 +568,19 @@ class LDSClient:
             f'<Position xmlns="">{position}</Position>'
             '<QueryTotalCount xmlns="">true</QueryTotalCount>'
             '<RequestFullList xmlns="">false</RequestFullList>'
-            '</pageQuery></GetPage>'
+            '</query>'
         )
 
     def _request_manager_xml(self, manager_name: str, soap_action: str, body: str) -> ET.Element:
-        response = requests.post(
+        response = self._request_manager_response(manager_name, soap_action, body)
+        return parse_soap_xml_response(
+            response.status_code,
+            response.headers.get('Content-Type', ''),
+            response.content,
+        )
+
+    def _request_manager_response(self, manager_name: str, soap_action: str, body: str) -> requests.Response:
+        return requests.post(
             self._manager_url(manager_name),
             data=self._envelope(body),
             headers={
@@ -399,7 +589,25 @@ class LDSClient:
             },
             timeout=self.timeout,
         )
-        return parse_soap_response(response.status_code, response.text)
+
+    def _request_sharepoint_xml(self, soap_action: str, body: str) -> ET.Element:
+        response = self._request_sharepoint_response(soap_action, body)
+        return parse_soap_xml_response(
+            response.status_code,
+            response.headers.get('Content-Type', ''),
+            response.content,
+        )
+
+    def _request_sharepoint_response(self, soap_action: str, body: str) -> requests.Response:
+        return requests.post(
+            self._manager_url('SmsSharePointManager'),
+            data=self._envelope(body),
+            headers={
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': soap_action,
+            },
+            timeout=self.timeout,
+        )
 
     def _envelope(self, body: str) -> str:
         return (
@@ -437,6 +645,20 @@ def xml_escape(value: Any) -> str:
 
 
 def parse_soap_body(xml_text: str) -> ET.Element:
+    stripped = xml_text.lstrip()
+    if not stripped.startswith('<') or stripped.startswith('--'):
+        envelope_start = xml_text.find('<s:Envelope')
+        if envelope_start < 0:
+            envelope_start = xml_text.find('<soap:Envelope')
+        envelope_end = xml_text.rfind('</s:Envelope>')
+        if envelope_end < 0:
+            envelope_end = xml_text.rfind('</soap:Envelope>')
+            if envelope_end >= 0:
+                envelope_end += len('</soap:Envelope>')
+        else:
+            envelope_end += len('</s:Envelope>')
+        if envelope_start >= 0 and envelope_end > envelope_start:
+            xml_text = xml_text[envelope_start:envelope_end]
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError as exc:
@@ -458,6 +680,27 @@ def parse_soap_response(status_code: int, xml_text: str) -> ET.Element:
     if status_code >= 400:
         raise LDSClientError(f'LDS SOAP request failed with status {status_code}.')
     return body_payload
+
+
+def parse_soap_xml_response(status_code: int, content_type: str, content: bytes) -> ET.Element:
+    if is_multipart_related(content_type):
+        root_xml, _attachments = _parse_multipart_related(content_type, content)
+        return parse_soap_response(status_code, root_xml.decode('utf-8', errors='replace'))
+    return parse_soap_response(status_code, content.decode('utf-8', errors='replace'))
+
+
+def parse_soap_binary_response(status_code: int, content_type: str, content: bytes) -> bytes:
+    if is_multipart_related(content_type):
+        root_xml, attachments = _parse_multipart_related(content_type, content)
+        body_payload = parse_soap_response(status_code, root_xml.decode('utf-8', errors='replace'))
+        result_element = _find_binary_result_element(body_payload)
+        href = _extract_xop_include_href(result_element)
+        if href:
+            return _find_attachment_payload(attachments, href)
+        return _decode_base64_or_fail(result_element.text or '')
+    body_payload = parse_soap_response(status_code, content.decode('utf-8', errors='replace'))
+    result_element = _find_binary_result_element(body_payload)
+    return _decode_base64_or_fail(result_element.text or '')
 
 
 def extract_validation_error_details(fault_element: ET.Element) -> list[LDSValidationErrorDetail]:
@@ -501,6 +744,31 @@ def summary_from_entry_element(element: ET.Element) -> LDSEntrySummary:
     )
 
 
+def sharepoint_file_info_summary_from_element(element: ET.Element) -> LDSSharePointFileInfoSummary:
+    return LDSSharePointFileInfoSummary(
+        file_name=find_text(element, 'FileName') or find_text(element, 'Name'),
+        document_type_code=find_text(element, 'DocumentTypeCode'),
+        document_type_name=find_text(element, 'DocumentTypeName'),
+        source_link=find_text(element, 'SourceLink'),
+        raw_xml=ET.tostring(element, encoding='unicode'),
+    )
+
+
+def dis_info_summary_from_element(element: ET.Element) -> LDSDISInfoSummary:
+    return LDSDISInfoSummary(
+        entity_id=find_text(element, 'Id'),
+        dis_number=find_text(element, 'DISNumber') or find_text(element, 'Number'),
+        client_ref=find_text(element, 'ClientRef'),
+        references=find_text(element, 'References'),
+        document_name=find_text(element, 'DocumentName'),
+        document_tracking_id=find_text(element, 'DocumentTrackingID'),
+        document_description=find_text(element, 'DocumentDescription'),
+        document_review_status=find_text(element, 'DocumentReviewStatus'),
+        source_link=find_text(element, 'SourceLink'),
+        raw_xml=ET.tostring(element, encoding='unicode'),
+    )
+
+
 def dedupe_named_elements(elements: list[ET.Element]) -> list[ET.Element]:
     seen = set()
     result = []
@@ -528,3 +796,68 @@ def find_text(element: ET.Element, tag_name: str) -> str | None:
 
 def localname(tag: str) -> str:
     return tag.split('}', 1)[-1]
+
+
+def is_multipart_related(content_type: str) -> bool:
+    return (content_type or '').lower().startswith('multipart/related')
+
+
+def _parse_multipart_related(content_type: str, content: bytes) -> tuple[bytes, dict[str, bytes]]:
+    synthetic_message = f'Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n'.encode('utf-8') + content
+    message = BytesParser(policy=policy.default).parsebytes(synthetic_message)
+    if not message.is_multipart():
+        raise LDSClientError('LDS multipart response did not contain multiple parts.')
+    parts = list(message.iter_parts())
+    if not parts:
+        raise LDSClientError('LDS multipart response did not contain a SOAP root part.')
+    root_xml = parts[0].get_payload(decode=True) or b''
+    attachments: dict[str, bytes] = {}
+    for part in parts[1:]:
+        cid = (part.get('Content-ID') or '').strip().strip('<>')
+        if cid:
+            attachments[cid] = part.get_payload(decode=True) or b''
+    return root_xml, attachments
+
+
+def _find_binary_result_element(body_payload: ET.Element) -> ET.Element:
+    for element in body_payload.iter():
+        name = localname(element.tag)
+        if not name.endswith('Result'):
+            continue
+        if _extract_xop_include_href(element):
+            return element
+        if (element.text or '').strip():
+            return element
+    raise LDSClientError('LDS SOAP binary response did not contain a result payload.')
+
+
+def _extract_xop_include_href(element: ET.Element) -> str | None:
+    for child in element.iter():
+        if localname(child.tag) != 'Include':
+            continue
+        href = child.attrib.get('href')
+        if href:
+            return href
+    return None
+
+
+def _find_attachment_payload(attachments: dict[str, bytes], href: str) -> bytes:
+    key = href.strip()
+    if key.lower().startswith('cid:'):
+        key = key[4:]
+    key = key.strip('<>')
+    payload = attachments.get(key)
+    if payload is None:
+        raise LDSClientError('LDS SOAP attachment payload was not found for the requested file.')
+    return payload
+
+
+def _decode_base64_or_fail(value: str) -> bytes:
+    encoded = (value or '').strip()
+    if not encoded:
+        raise LDSClientError('LDS SOAP binary response was empty.')
+    try:
+        import base64
+        return base64.b64decode(encoded)
+    except Exception as exc:  # pragma: no cover
+        raise LDSClientError('LDS SOAP binary response was not valid base64.') from exc

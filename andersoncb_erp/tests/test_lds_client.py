@@ -1,6 +1,6 @@
 import pytest
 
-from andersoncb_erp.integrations.lds import LDSClient, LDSEntrySummary, LDSClientError, build_rolling_window_criteria, extract_entry_elements, parse_soap_body, summary_from_entry_element
+from andersoncb_erp.integrations.lds import LDSClient, LDSEntrySummary, LDSClientError, build_rolling_window_criteria, extract_entry_elements, parse_soap_binary_response, parse_soap_body, summary_from_entry_element
 
 
 SOAP_XML = """<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetPageResponse xmlns="http://tempuri.org/"><GetPageResult><Items><a:CustomsEntry xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Documents" xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/" z:Id="i1"><Id xmlns="">99</Id><EntryFilerCode xmlns="">SY1</EntryFilerCode><EntryNumber xmlns="">30029607</EntryNumber><Date xmlns="">2026-06-01</Date></a:CustomsEntry></Items></GetPageResult></GetPageResponse></soap:Body></soap:Envelope>"""
@@ -162,3 +162,86 @@ def test_fetch_harmonized_tariff_by_code_uses_directory_contract(monkeypatch):
     assert captured['manager_name'] == 'HarmonizedTariffManager'
     assert captured['soap_action'] == 'http://tempuri.org/IEntityManagerDirectoryOf_HarmonizedTariff/GetByCode'
     assert '<code>9403409060</code>' in captured['body']
+
+
+DIS_INFO_XML = """<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><DISInfoResponse xmlns="http://tempuri.org/"><DISInfoResult><Items><a:DISInfo xmlns:a="http://schemas.datacontract.org/2004/07/SMS.Broker.DataContracts.Info"><DISNumber xmlns="">311</DISNumber><DocumentName xmlns="">invoice.pdf</DocumentName><DocumentTrackingID xmlns="">TRACK-1</DocumentTrackingID><DocumentDescription xmlns="">Commercial invoice</DocumentDescription><DocumentReviewStatus xmlns="">Pending</DocumentReviewStatus><SourceLink xmlns="">/EntityFiles/DIS/311</SourceLink></a:DISInfo></Items><HasNext>false</HasNext></DISInfoResult></DISInfoResponse></soap:Body></soap:Envelope>"""
+
+
+def test_fetch_dis_info_page_uses_lookup_contract(monkeypatch):
+    client = LDSClient(endpoint_url='https://example.test/BrokerService', username='user', password='pass')
+    captured = {}
+
+    def fake_request(manager_name, soap_action, body):
+        captured['manager_name'] = manager_name
+        captured['soap_action'] = soap_action
+        captured['body'] = body
+        return parse_soap_body(DIS_INFO_XML)
+
+    monkeypatch.setattr(client, '_request_manager_xml', fake_request)
+
+    page = client.fetch_dis_info_page("[DISNumber] = '311'", page_size=25, position=5)
+
+    assert captured['manager_name'] == 'SmsLookupManager'
+    assert captured['soap_action'] == 'http://tempuri.org/ISmsLookupManager/DISInfo'
+    assert '<DISInfo xmlns="http://tempuri.org/">' in captured['body']
+    assert '<Criteria xmlns="">[DISNumber] = &apos;311&apos;</Criteria>' in captured['body']
+    assert '<PageSize xmlns="">25</PageSize>' in captured['body']
+    assert '<Position xmlns="">5</Position>' in captured['body']
+    assert len(page.items) == 1
+    assert page.items[0].document_name == 'invoice.pdf'
+    assert page.items[0].document_description == 'Commercial invoice'
+    assert page.items[0].source_link == '/EntityFiles/DIS/311'
+    assert page.has_more is False
+
+
+def test_fetch_entity_file_uses_service_contract(monkeypatch):
+    client = LDSClient(endpoint_url='https://example.test/BrokerService', username='user', password='pass')
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        headers = {'Content-Type': 'text/xml; charset=utf-8'}
+        content = b'<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetEntityFileResponse xmlns="http://tempuri.org/"><GetEntityFileResult>aGVsbG8=</GetEntityFileResult></GetEntityFileResponse></soap:Body></soap:Envelope>'
+
+    def fake_request(manager_name, soap_action, body):
+        captured['manager_name'] = manager_name
+        captured['soap_action'] = soap_action
+        captured['body'] = body
+        return FakeResponse()
+
+    monkeypatch.setattr(client, '_request_manager_response', fake_request)
+
+    payload = client.fetch_entity_file('/EntityFiles/DIS/311', 'invoice.pdf')
+
+    assert payload == b'hello'
+    assert captured['manager_name'] == 'SmsServiceManager'
+    assert captured['soap_action'] == 'http://tempuri.org/ISmsServiceManager/GetEntityFile'
+    assert '<link>/EntityFiles/DIS/311</link>' in captured['body']
+    assert '<fileName>invoice.pdf</fileName>' in captured['body']
+
+
+def test_parse_soap_binary_response_supports_mtom_xop_attachment():
+    content_type = 'multipart/related; boundary="uuid:test-boundary"; type="application/xop+xml"; start="<rootpart>"; start-info="text/xml"'
+    xml_part = (
+        '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" '
+        'xmlns:xop="http://www.w3.org/2004/08/xop/include">'
+        '<soap:Body><GetEntityFileResponse xmlns="http://tempuri.org/">'
+        '<GetEntityFileResult><xop:Include href="cid:filepart"/></GetEntityFileResult>'
+        '</GetEntityFileResponse></soap:Body></soap:Envelope>'
+    ).encode('utf-8')
+    binary_part = b'PDF-BYTES'
+    multipart = (
+        b'--uuid:test-boundary\r\n'
+        b'Content-Type: application/xop+xml; charset=UTF-8; type="text/xml"\r\n'
+        b'Content-Transfer-Encoding: 8bit\r\n'
+        b'Content-ID: <rootpart>\r\n\r\n' + xml_part +
+        b'\r\n--uuid:test-boundary\r\n'
+        b'Content-Type: application/octet-stream\r\n'
+        b'Content-Transfer-Encoding: binary\r\n'
+        b'Content-ID: <filepart>\r\n\r\n' + binary_part +
+        b'\r\n--uuid:test-boundary--\r\n'
+    )
+
+    payload = parse_soap_binary_response(200, content_type, multipart)
+
+    assert payload == binary_part

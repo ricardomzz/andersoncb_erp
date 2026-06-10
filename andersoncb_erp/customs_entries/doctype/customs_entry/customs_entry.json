@@ -62,6 +62,8 @@
     "events",
     "references_section",
     "references",
+    "documents_section",
+    "documents",
     "system_section",
     "lds_id",
     "importer_lds_id",
@@ -313,6 +315,17 @@
       "fieldtype": "Section Break",
       "label": "Events",
       "depends_on": "eval:doc.events && doc.events.length"
+    },
+    {
+      "fieldname": "documents_section",
+      "fieldtype": "Section Break",
+      "label": "Documents"
+    },
+    {
+      "fieldname": "documents",
+      "fieldtype": "Table",
+      "label": "Documents",
+      "options": "Entry Document"
     },
     {
       "fieldname": "system_section",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 from frappe.model.document import Document
 
+from andersoncb_erp.services.dis_submission import process_dis_document_submission
 from andersoncb_erp.services.submission import (
     generate_draft_entry_number,
     is_draft_placeholder_entry_number,
@@ -41,6 +42,7 @@ class CustomsEntry(Document):
 
         try:
             process_lds_submission(self)
+            process_dis_document_submission(self)
         except frappe.ValidationError as exc:
             persist_submission_failure(self, str(exc), payload=getattr(self, 'lds_last_submission_payload', None))
             raise

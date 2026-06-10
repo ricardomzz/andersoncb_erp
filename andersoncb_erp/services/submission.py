@@ -37,7 +37,7 @@ ET.register_namespace("b", DIRECTORIES_NS)
 ET.register_namespace("i", XSI_NS)
 ET.register_namespace("z", SERIALIZATION_NS)
 
-CHILD_TABLE_FIELDS = ("shipments", "invoices", "articles", "fees", "events", "tariff_lines", "references")
+CHILD_TABLE_FIELDS = ("shipments", "invoices", "articles", "fees", "events", "tariff_lines", "references", "documents")
 DRAFT_ENTRY_NUMBER_RE = re.compile(r"^TMP[A-Z0-9]{5}$")
 FALLBACK_ENTRY_NUMBER_FLOOR = 3005004
 

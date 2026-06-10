@@ -7,6 +7,7 @@ const RAW_RELATIONSHIP_SECTIONS = [
     "commercial_section",
     "articles_section",
     "classification_section",
+    "documents_section",
 ];
 const ENTRY_TYPE_GUIDANCE = {
     "03": {
@@ -222,6 +223,79 @@ function ensureGuidedStyles() {
             color: var(--text-muted);
             font-size: 12px;
         }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-shipment,
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-invoice,
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-article {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--control-bg);
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-shipment {
+            padding: 14px;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-invoice,
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-article {
+            padding: 12px;
+            margin-top: 10px;
+            background: var(--fg-color);
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-article {
+            margin-left: 14px;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-meta,
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-submeta {
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-structure-block-label {
+            margin: 12px 0 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-tariff-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-tariff-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--control-bg);
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-tariff-title {
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .${GUIDED_WORKSPACE_CLASS} .cegw-muted-note {
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-top: 8px;
+        }
         @media (max-width: 1080px) {
             .${GUIDED_WORKSPACE_CLASS} .cegw-layout {
                 grid-template-columns: 1fr;
@@ -308,6 +382,15 @@ function applyFieldHelp(frm) {
         );
     }
 
+    const documentGrid = frm.fields_dict.documents?.grid;
+    if (documentGrid) {
+        documentGrid.update_docfield_property(
+            "upload_to_dis",
+            "description",
+            __("Checked documents will be uploaded into a DIS package for this entry during submit."),
+        );
+    }
+
     const tariffGrid = frm.fields_dict.tariff_lines?.grid;
     if (tariffGrid) {
         tariffGrid.update_docfield_property(
@@ -389,6 +472,13 @@ function collectClientValidationIssues(frm) {
     const articleKeys = new Set(
         articles.map((row) => [normalizeText(row.shipment_no), normalizeText(row.invoice_number), normalizeText(row.article_line_no)].join("::")),
     );
+
+    for (const row of frm.doc.documents || []) {
+        if (row.upload_to_dis && !normalizeText(row.file_url)) {
+            issues.push(__("Each DIS document row needs a file attached before submit."));
+            break;
+        }
+    }
 
     for (const fieldname of ["house_bill", "master_bill"]) {
         const value = normalizeText(frm.doc[fieldname]);
@@ -1125,6 +1215,42 @@ function renderTariffPanel(frm, state) {
     `;
 }
 
+function summarizeDocument(row) {
+    const title = normalizeText(row.description) || normalizeText(row.file_url) || __("New document");
+    const meta = [row.upload_to_dis ? __("Upload to DIS") : __("Keep local"), normalizeText(row.dis_status)].filter(Boolean).join(" · ");
+    const submeta = [normalizeText(row.dis_document_id), normalizeText(row.dis_uploaded_on)].filter(Boolean).join(" · ");
+    return { title, meta, submeta };
+}
+
+function renderDocumentPanel(frm) {
+    const documents = getRows(frm, "documents");
+    const body = documents.length
+        ? documents.map((row) => {
+            const summary = summarizeDocument(row);
+            return renderListItem({
+                ...summary,
+                active: false,
+                selectAction: "noop",
+                editAction: "edit-document",
+                name: row.name,
+            });
+        }).join("")
+        : renderEmptyState(__("Attach supporting files here. Mark only the documents that should be uploaded to DIS."), __("Add Document"), "add-document");
+
+    return `
+        <section class="cegw-panel cegw-layout-bottom">
+            <div class="cegw-panel-header">
+                <div>
+                    <h5>${__("5. Documents")}</h5>
+                    <p>${__("Add files, describe them in business terms, and mark only the ones that should go to DIS during submit.")}</p>
+                </div>
+                <button type="button" class="btn btn-xs btn-primary" data-action="add-document">${__("Add Document")}</button>
+            </div>
+            <div class="cegw-list">${body}</div>
+        </section>
+    `;
+}
+
 function renderContextSummary(frm, state) {
     const shipment = getSelectedShipmentRow(frm, state);
     const invoice = getSelectedInvoiceRow(frm, state);
@@ -1153,6 +1279,221 @@ function renderContextSummary(frm, state) {
         </div>
     `;
 }
+
+function renderStructureHeader(summary, label, action, name, options = {}) {
+    const contextAction = options.contextAction;
+    const contextName = options.contextName;
+    const contextIsActive = !!options.contextIsActive;
+    const contextAttrs = contextAction && contextName
+        ? ` data-action="${contextAction}" data-name="${escapeHtml(contextName)}" role="button" tabindex="0"`
+        : "";
+    const contextClass = contextAction && contextName ? ` cegw-item ${contextIsActive ? "is-active" : ""}` : "";
+    const actionButtons = [];
+    for (const config of (options.extraActions || [])) {
+        if (!config?.action || !config?.name) continue;
+        actionButtons.push(`<button type="button" class="btn btn-xs ${config.primary ? "btn-primary" : "btn-secondary"}" data-action="${config.action}" data-name="${escapeHtml(config.name)}">${escapeHtml(config.label)}</button>`);
+    }
+    if (action && name) {
+        actionButtons.push(`<button type="button" class="btn btn-xs btn-secondary" data-action="${action}" data-name="${escapeHtml(name)}">${__("Open Raw Row")}</button>`);
+    }
+    return `
+        <div class="cegw-structure-header${contextClass}"${contextAttrs}>
+            <div>
+                <div class="cegw-structure-title">${escapeHtml(summary.title || label)}</div>
+                ${summary.meta ? `<div class="cegw-structure-meta">${escapeHtml(summary.meta)}</div>` : ""}
+                ${summary.submeta ? `<div class="cegw-structure-submeta">${escapeHtml(summary.submeta)}</div>` : ""}
+            </div>
+            <div class="cegw-item-actions">${actionButtons.join("")}</div>
+        </div>
+    `;
+}
+
+function groupEntryStructure(frm) {
+    const shipments = getRows(frm, "shipments");
+    const invoices = getRows(frm, "invoices");
+    const articles = getRows(frm, "articles");
+    const tariffLines = getRows(frm, "tariff_lines");
+    const shipmentMap = new Map();
+
+    for (const shipment of shipments) {
+        shipmentMap.set(normalizeText(shipment.shipment_no) || shipment.name, {
+            shipment,
+            invoices: [],
+        });
+    }
+
+    function getOrCreateShipmentBucket(shipmentNo) {
+        const key = normalizeText(shipmentNo) || "__unassigned__";
+        if (!shipmentMap.has(key)) {
+            shipmentMap.set(key, { shipment: null, shipmentNo: key, invoices: [] });
+        }
+        return shipmentMap.get(key);
+    }
+
+    for (const invoice of invoices) {
+        const shipmentBucket = getOrCreateShipmentBucket(invoice.shipment_no);
+        shipmentBucket.invoices.push({ invoice, articles: [] });
+    }
+
+    function getOrCreateInvoiceBucket(shipmentBucket, article) {
+        const invoiceNumber = normalizeText(article?.invoice_number);
+        let invoiceBucket = shipmentBucket.invoices.find((row) => normalizeText(row.invoice?.invoice_number) === invoiceNumber);
+        if (!invoiceBucket) {
+            invoiceBucket = { invoice: null, invoiceNumber, articles: [] };
+            shipmentBucket.invoices.push(invoiceBucket);
+        }
+        return invoiceBucket;
+    }
+
+    for (const article of articles) {
+        const shipmentBucket = getOrCreateShipmentBucket(article.shipment_no);
+        const invoiceBucket = getOrCreateInvoiceBucket(shipmentBucket, article);
+        invoiceBucket.articles.push({ article, tariffs: [] });
+    }
+
+    function getOrCreateArticleBucket(invoiceBucket, tariff) {
+        const articleLineNo = normalizeText(tariff?.article_line_no);
+        let articleBucket = invoiceBucket.articles.find((row) => normalizeText(row.article?.article_line_no) === articleLineNo);
+        if (!articleBucket) {
+            articleBucket = { article: null, articleLineNo, tariffs: [] };
+            invoiceBucket.articles.push(articleBucket);
+        }
+        return articleBucket;
+    }
+
+    for (const tariff of tariffLines) {
+        const shipmentBucket = getOrCreateShipmentBucket(tariff.shipment_no);
+        const invoiceBucket = getOrCreateInvoiceBucket(shipmentBucket, { invoice_number: tariff.invoice_number });
+        const articleBucket = getOrCreateArticleBucket(invoiceBucket, tariff);
+        articleBucket.tariffs.push(tariff);
+    }
+
+    return Array.from(shipmentMap.values());
+}
+
+function renderTariffStructureRows(articleBucket, isDraft) {
+    if (!articleBucket.tariffs.length) {
+        return `<div class="cegw-muted-note">${escapeHtml(__("No tariff lines linked to this article."))}</div>`;
+    }
+    return `
+        <div class="cegw-structure-block-label">${__("Tariff Lines")}${isDraft && articleBucket.article ? ` <button type="button" class="btn btn-xs btn-secondary" data-action="add-tariff-for-article" data-name="${escapeHtml(articleBucket.article.name)}">${escapeHtml(__("Add Tariff"))}</button>` : ""}</div>
+        <div class="cegw-tariff-list">
+            ${articleBucket.tariffs.map((tariff) => {
+                const summary = summarizeTariff(tariff);
+                return `
+                    <div class="cegw-tariff-row">
+                        <div>
+                            <div class="cegw-tariff-title">${escapeHtml(summary.title)}</div>
+                            ${summary.meta ? `<div class="cegw-structure-meta">${escapeHtml(summary.meta)}</div>` : ""}
+                            ${summary.submeta ? `<div class="cegw-structure-submeta">${escapeHtml(summary.submeta)}</div>` : ""}
+                        </div>
+                        <button type="button" class="btn btn-xs btn-secondary" data-action="edit-tariff" data-name="${escapeHtml(tariff.name)}">${__("Open Raw Row")}</button>
+                    </div>
+                `;
+            }).join("")}
+        </div>
+    `;
+}
+
+function renderArticleStructure(frm, articleBucket, isDraft) {
+    const summary = articleBucket.article
+        ? summarizeArticle(articleBucket.article)
+        : {
+            title: __("Article {0}", [articleBucket.articleLineNo || "?"]),
+            meta: __("Article row not present locally"),
+            submeta: "",
+        };
+    return `
+        <div class="cegw-structure-article">
+            ${renderStructureHeader(summary, __("Article"), articleBucket.article ? "edit-article" : null, articleBucket.article?.name, {
+                contextAction: isDraft && articleBucket.article ? "select-article" : null,
+                contextName: isDraft && articleBucket.article ? articleBucket.article.name : null,
+                contextIsActive: isDraft && articleBucket.article ? getGuidedState(frm).selectedArticle === articleBucket.article.name : false,
+                extraActions: isDraft && articleBucket.article ? [{ action: "add-tariff-for-article", name: articleBucket.article.name, label: __("Add Tariff"), primary: true }] : [],
+            })}
+            ${renderTariffStructureRows(articleBucket, isDraft)}
+        </div>
+    `;
+}
+
+function renderInvoiceStructure(frm, invoiceBucket, isDraft) {
+    const summary = invoiceBucket.invoice
+        ? summarizeInvoice(invoiceBucket.invoice)
+        : {
+            title: invoiceBucket.invoiceNumber || __("Unassigned Invoice"),
+            meta: __("Invoice row not present locally"),
+            submeta: "",
+        };
+    return `
+        <div class="cegw-structure-invoice">
+            ${renderStructureHeader(summary, __("Invoice"), invoiceBucket.invoice ? "edit-invoice" : null, invoiceBucket.invoice?.name, {
+                contextAction: isDraft && invoiceBucket.invoice ? "select-invoice" : null,
+                contextName: isDraft && invoiceBucket.invoice ? invoiceBucket.invoice.name : null,
+                contextIsActive: isDraft && invoiceBucket.invoice ? getGuidedState(frm).selectedInvoice === invoiceBucket.invoice.name : false,
+                extraActions: isDraft && invoiceBucket.invoice ? [{ action: "add-article-for-invoice", name: invoiceBucket.invoice.name, label: __("Add Article"), primary: true }] : [],
+            })}
+            <div class="cegw-structure-block-label">${__("Articles")}</div>
+            ${invoiceBucket.articles.length ? invoiceBucket.articles.map((bucket) => renderArticleStructure(frm, bucket, isDraft)).join("") : `<div class="cegw-muted-note">${escapeHtml(__("No articles linked to this invoice."))}</div>`}
+        </div>
+    `;
+}
+
+function renderShipmentStructure(frm, shipmentBucket, isDraft) {
+    const summary = shipmentBucket.shipment
+        ? summarizeShipment(frm, shipmentBucket.shipment)
+        : {
+            title: __("Shipment {0}", [shipmentBucket.shipmentNo || __("Unassigned")]),
+            meta: __("Shipment row not present locally"),
+            submeta: "",
+        };
+    return `
+        <div class="cegw-structure-shipment">
+            ${renderStructureHeader(summary, __("Shipment"), shipmentBucket.shipment ? "edit-shipment" : null, shipmentBucket.shipment?.name, {
+                contextAction: isDraft && shipmentBucket.shipment ? "select-shipment" : null,
+                contextName: isDraft && shipmentBucket.shipment ? shipmentBucket.shipment.name : null,
+                contextIsActive: isDraft && shipmentBucket.shipment ? getGuidedState(frm).selectedShipment === shipmentBucket.shipment.name : false,
+                extraActions: isDraft && shipmentBucket.shipment ? [{ action: "add-invoice-for-shipment", name: shipmentBucket.shipment.name, label: __("Add Invoice"), primary: true }] : [],
+            })}
+            <div class="cegw-structure-block-label">${__("Invoices")}</div>
+            ${shipmentBucket.invoices.length ? shipmentBucket.invoices.map((bucket) => renderInvoiceStructure(frm, bucket, isDraft)).join("") : `<div class="cegw-muted-note">${escapeHtml(__("No invoices linked to this shipment."))}</div>`}
+        </div>
+    `;
+}
+
+function renderStructureWorkspace(frm) {
+    const workspace = ensureWorkspaceShell(frm);
+    if (!workspace?.length) {
+        return;
+    }
+    const state = getGuidedState(frm);
+    setRawRelationshipSectionsVisible(frm, !!state.showAdvanced);
+    const isDraft = frm.doc.docstatus === 0;
+    const advancedLabel = state.showAdvanced ? __("Hide Advanced / Raw Relationships") : __("Show Advanced / Raw Relationships");
+    const shipmentGroups = groupEntryStructure(frm);
+    const html = `
+        <div class="cegw-topbar">
+            <div class="cegw-title">
+                <h4>${__("Entry Structure")}</h4>
+                <p>${isDraft
+                    ? __("Build the entry in business order: shipment, invoice, article, then tariff lines. Relationship fields stay in the raw rows, but users should work from this structure.")
+                    : __("Review LDS relationships in business order: shipment, invoice, article, then tariff lines. Use raw tables only when you need implementation detail.")}</p>
+            </div>
+            <div class="cegw-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-action="toggle-advanced">${escapeHtml(advancedLabel)}</button>
+                ${isDraft ? `<button type="button" class="btn btn-secondary btn-sm" data-action="add-shipment">${escapeHtml(__("Add Shipment"))}</button><button type="button" class="btn btn-secondary btn-sm" data-action="add-document">${escapeHtml(__("Add Document"))}</button>` : ""}
+            </div>
+        </div>
+        ${isDraft ? renderContextSummary(frm, state) : ""}
+        <div class="cegw-structure-list">
+            ${shipmentGroups.length ? shipmentGroups.map((group) => renderShipmentStructure(frm, group, isDraft)).join("") : renderEmptyState(isDraft ? __("Create the first shipment to start building the entry structure.") : __("No shipment, invoice, article, or tariff structure is available for this entry."), isDraft ? __("Add Shipment") : null, isDraft ? "add-shipment" : null)}
+        </div>
+        ${isDraft ? renderDocumentPanel(frm) : ""}
+        <div class="cegw-footer-note">${__("Advanced / Raw Relationships keeps the original child tables available for troubleshooting and one-off row inspection.")}</div>
+    `;
+    workspace.html(html);
+    bindWorkspaceEvents(frm, workspace);
+}
+
 
 function bindWorkspaceEvents(frm, workspace) {
     workspace.off("click.guided").on("click.guided", "[data-action]", async (event) => {
@@ -1243,6 +1584,10 @@ async function handleWorkspaceAction(frm, action, rowName) {
         openChildRow(frm, "tariff_lines", rowName);
         return;
     }
+    if (action === "edit-document") {
+        openChildRow(frm, "documents", rowName);
+        return;
+    }
 
     if (action === "add-shipment") {
         const row = frm.add_child("shipments", {
@@ -1260,6 +1605,42 @@ async function handleWorkspaceAction(frm, action, rowName) {
         frm.events.render_guided_workspace(frm);
         openChildRow(frm, "shipments", row.name);
         return;
+    }
+
+    if (action === "add-invoice-for-shipment") {
+        state.selectedShipment = rowName;
+        state.selectedInvoice = null;
+        state.selectedArticle = null;
+        action = "add-invoice";
+    }
+
+    if (action === "add-article-for-invoice") {
+        const invoice = findInvoiceRowByName(frm, rowName);
+        if (invoice) {
+            state.selectedInvoice = invoice.name;
+            state.selectedArticle = null;
+            const shipment = findShipmentRowByShipmentNo(frm, invoice.shipment_no);
+            if (shipment) {
+                state.selectedShipment = shipment.name;
+            }
+        }
+        action = "add-article";
+    }
+
+    if (action === "add-tariff-for-article") {
+        const article = findArticleRowByName(frm, rowName);
+        if (article) {
+            state.selectedArticle = article.name;
+            const invoice = findInvoiceRowByCompositeKey(frm, article.shipment_no, article.invoice_number);
+            const shipment = findShipmentRowByShipmentNo(frm, article.shipment_no);
+            if (invoice) {
+                state.selectedInvoice = invoice.name;
+            }
+            if (shipment) {
+                state.selectedShipment = shipment.name;
+            }
+        }
+        action = "add-tariff";
     }
 
     if (action === "add-invoice") {
@@ -1315,6 +1696,15 @@ async function handleWorkspaceAction(frm, action, rowName) {
         return;
     }
 
+    if (action === "add-document") {
+        const row = frm.add_child("documents", { upload_to_dis: 0 });
+        frm.dirty();
+        frm.refresh_field("documents");
+        frm.events.render_guided_workspace(frm);
+        openChildRow(frm, "documents", row.name);
+        return;
+    }
+
     if (action === "add-tariff") {
         const article = getSelectedArticleRow(frm, state);
         if (!article) {
@@ -1358,45 +1748,7 @@ function openChildRow(frm, fieldname, rowName) {
 }
 
 function renderGuidedWorkspace(frm) {
-    if (frm.doc.docstatus !== 0) {
-        hideGuidedWorkspace(frm);
-        return;
-    }
-
-    const workspace = ensureWorkspaceShell(frm);
-    if (!workspace?.length) {
-        return;
-    }
-
-    const state = getGuidedState(frm);
-    setRawRelationshipSectionsVisible(frm, !!state.showAdvanced);
-
-    const advancedLabel = state.showAdvanced ? __("Hide Advanced / Raw Relationships") : __("Show Advanced / Raw Relationships");
-    const html = `
-        <div class="cegw-topbar">
-            <div class="cegw-title">
-                <h4>${__("Guided Draft Workspace")}</h4>
-                <p>${__("Create shipments, invoices, articles, and tariffs in business order. The workspace carries relationship fields behind the scenes.")}</p>
-            </div>
-            <div class="cegw-actions">
-                <button type="button" class="btn btn-secondary btn-sm" data-action="toggle-advanced">${escapeHtml(advancedLabel)}</button>
-                <button type="button" class="btn btn-secondary btn-sm" data-action="add-shipment">${__("Add Shipment")}</button>
-                <button type="button" class="btn btn-secondary btn-sm" data-action="add-invoice">${__("Add Invoice")}</button>
-                <button type="button" class="btn btn-secondary btn-sm" data-action="add-article">${__("Add Article")}</button>
-                <button type="button" class="btn btn-primary btn-sm" data-action="add-tariff">${__("Add Tariff")}</button>
-            </div>
-        </div>
-        ${renderContextSummary(frm, state)}
-        <div class="cegw-layout">
-            ${renderShipmentPanel(frm, state)}
-            ${renderInvoicePanel(frm, state)}
-            ${renderArticlePanel(frm, state)}
-        </div>
-        ${renderTariffPanel(frm, state)}
-    `;
-
-    workspace.html(html);
-    bindWorkspaceEvents(frm, workspace);
+    renderStructureWorkspace(frm);
 }
 
 function attachHsCodeAutocomplete(frm, cdn) {
@@ -1511,6 +1863,12 @@ frappe.ui.form.on("Customs Entry", {
     tariff_lines_remove(frm) {
         queueGuidedWorkspaceRefresh(frm);
     },
+    documents_add(frm) {
+        queueGuidedWorkspaceRefresh(frm);
+    },
+    documents_remove(frm) {
+        queueGuidedWorkspaceRefresh(frm);
+    },
     render_guided_workspace(frm) {
         renderGuidedWorkspace(frm);
     },
@@ -1580,3 +1938,11 @@ tariffHandlers.form_render = function (frm, cdt, cdn) {
     attachHsCodeAutocomplete(frm, cdn);
 };
 frappe.ui.form.on("Entry Tariff Line", tariffHandlers);
+
+
+frappe.ui.form.on("Entry Document", buildChildRefreshHandlers([
+    "file_url",
+    "description",
+    "upload_to_dis",
+    "dis_status",
+]));
